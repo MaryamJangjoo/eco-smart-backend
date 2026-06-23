@@ -1,0 +1,30 @@
+services:
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: ecosmart_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ecosmart_admin
+      POSTGRES_PASSWORD: ecosmart_secure_pass
+      POSTGRES_DB: ecosmart_core
+    ports:
+      - "5432:5432"
+    networks:
+      - ecosmart_network
+
+  backend_api:
+    build: ./backend-api
+    container_name: ecosmart_backend_api
+    restart: always
+   
+    command: sh -c "until nc -z ecosmart_postgres 5432; do echo 'Waiting for Postgres...'; sleep 2; done; npm run start:prod"
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend-api/.env
+    networks:
+      - ecosmart_network
+
+networks:
+  ecosmart_network:
+    driver: bridge
