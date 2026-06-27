@@ -16,7 +16,6 @@ services:
     build: ./backend-api
     container_name: ecosmart_backend_api
     restart: always
-   
     command: sh -c "until nc -z ecosmart_postgres 5432; do echo 'Waiting for Postgres...'; sleep 2; done; npm run start:prod"
     ports:
       - "3000:3000"
@@ -24,6 +23,8 @@ services:
       - ./backend-api/.env
     networks:
       - ecosmart_network
+    depends_on:
+      - postgres_db
 
 networks:
   ecosmart_network:

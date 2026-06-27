@@ -8,7 +8,10 @@
     "allowSyntheticDefaultImports": true,
     "target": "es2017",
     "sourceMap": true,
-    "outDir": "./dist",
-    "baseUrl": "./"
-  }
+    "outDir": "dist",
+    "rootDir": "./src",
+    "strictPropertyInitialization": false,
+    "ignoreDeprecations": "5.0"
+  },
+  "exclude": ["node_modules", "dist"]
 }
