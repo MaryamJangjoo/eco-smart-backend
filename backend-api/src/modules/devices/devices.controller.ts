@@ -1,42 +1,37 @@
+// src/modules/devices/devices.controller.ts
 import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { MyBusSecurityService } from './mybus-security.service';
 import { HandshakeRequestDto } from './dto/handshake-request.dto';
 import { SecureDataRequestDto } from './dto/secure-data-request.dto';
+import { DeviceRegistry } from './entities/device-registry.entity';
 
 @ApiTags('Devices')
 @Controller('devices')
 export class DevicesController {
-  constructor(private readonly securityService: MyBusSecurityService) {}
+  constructor(
+    private readonly securityService: MyBusSecurityService,
+    @InjectRepository(DeviceRegistry)
+    private readonly registryRepository: Repository<DeviceRegistry>,
+  ) {}
 
   @Post('handshake')
   @ApiOperation({ summary: 'Phase 1 & 2: ECDH Handshake and HMAC Challenge' })
-  @ApiResponse({ status: 200, description: 'Handshake successful' })
-  @ApiResponse({ status: 400, description: 'Invalid request' })
-  async handleHandshake(@Body() body: HandshakeRequestDto) {
-    if (body.security === 1 && body.data?.publicKeyPem) {
-      const { serverPublicKeyPem } = this.securityService.generateSessionKey(
-        body.deviceId,
-        body.data.publicKeyPem
-      );
-      return {
-        status: 'handshake_initiated',
-        serverPublicKeyPem,
-        message: 'ECDH key exchange completed. Proceed to challenge phase.',
-      };
-    }
+  @ApiResponse({ status: 201, description: 'Handshake processed successfully.' })
+  async handleHandshake(@Body() body: HandshakeRequestDto) { 
+    const { security, deviceId, data } = body;
 
-    if (body.security === 1 && body.data?.nonce && body.data?.hmac) {
-      const isValid = this.securityService.verifyDeviceChallenge(
-        body.deviceId,
-        body.data.nonce,
-        body.data.hmac
-      );
-
+    if (security === 1 && data?.publicKeyPem) {
+      return this.securityService.generateSessionKey(deviceId, data.publicKeyPem);
+    } 
+    
+    if (security === 1 && data?.nonce && data?.hmac) {
+      const isValid = this.securityService.verifyDeviceChallenge(deviceId, data.nonce, data.hmac);
       if (!isValid) {
-        throw new BadRequestException('HMAC authentication failed. Device identity not verified.');
+        throw new BadRequestException('HMAC challenge verification failed.');
       }
-
       return {
         status: 'authenticated',
         message: 'mYBUS secure session established successfully.',
@@ -44,29 +39,17 @@ export class DevicesController {
       };
     }
 
-    throw new BadRequestException(
-      'Invalid mYBUS handshake frame format. Expected security=1 with publicKeyPem or nonce+hmac.'
-    );
+    throw new BadRequestException('Invalid handshake security structure or parameters missing.');
   }
 
   @Post('data')
-  @ApiOperation({ summary: 'Phase 3: Send encrypted mYBUS data (AES-256-GCM)' })
-  @ApiResponse({ status: 200, description: 'Data decrypted successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid encrypted data' })
+  @ApiOperation({ summary: 'Phase 3: Secure Request/Response Packet Engine (TypeORM Connected)' })
   async handleSecureData(@Body() body: SecureDataRequestDto) {
     if (body.security !== 2) {
-      throw new BadRequestException(
-        'This endpoint only accepts encrypted packets with security=2.'
-      );
+      throw new BadRequestException('This endpoint only accepts encrypted packets with security=2.');
     }
 
     const { deviceId, data } = body;
-
-    if (!data?.encryptedData || !data?.iv || !data?.authTag) {
-      throw new BadRequestException(
-        'Missing required AES-GCM parameters: encryptedData, IV, or AuthTag.'
-      );
-    }
 
     try {
       const encryptedBuffer = Buffer.from(data.encryptedData, 'hex');
@@ -80,18 +63,66 @@ export class DevicesController {
         authTagBuffer
       );
 
-      const myBusCommand = JSON.parse(decryptedPlaintext);
+      const myBusPayload = JSON.parse(decryptedPlaintext);
+      let applicationResponse = {};
+
+      switch (myBusPayload.action) {
+        case 'READ': {
+          let registry = await this.registryRepository.findOne({
+            where: { deviceId, registryAddress: myBusPayload.registryAddress }
+          });
+
+          const resultValue = registry ? registry.value : '24.5';
+
+          applicationResponse = {
+            action: 'READ_REPLY',
+            registryAddress: myBusPayload.registryAddress,
+            value: resultValue,
+            status: registry ? registry.status : 'DEFAULT_MOCK'
+          };
+          break;
+        }
+
+        case 'WRITE': {
+          let registry = await this.registryRepository.findOne({
+            where: { deviceId, registryAddress: myBusPayload.registryAddress }
+          });
+
+          if (!registry) {
+            registry = this.registryRepository.create({
+              deviceId,
+              registryAddress: myBusPayload.registryAddress,
+            });
+          }
+
+          registry.value = String(myBusPayload.value);
+          registry.status = 'OK';
+          await this.registryRepository.save(registry);
+
+          applicationResponse = {
+            action: 'WRITE_REPLY',
+            registryAddress: myBusPayload.registryAddress,
+            status: 'SUCCESS',
+            message: `Database entry persisted. Registry ${myBusPayload.registryAddress} is now set to ${myBusPayload.value}`
+          };
+          break;
+        }
+
+        default:
+          throw new BadRequestException(`Action protocol '${myBusPayload.action}' is unsupported.`);
+      }
 
       return {
         status: 'success',
-        message: 'mYBUS packet successfully decrypted and authenticated.',
-        parsedCommand: myBusCommand,
+        message: 'mYBUS application packet executed successfully.',
+        deviceId,
+        zoneId: body.zoneId,
+        requestNumber: body.requestNumber,
+        payloadResponse: applicationResponse
       };
 
-    } catch (error) {
-      throw new BadRequestException(
-        'Decryption failed. Session key may be expired or data has been tampered with.'
-      );
+    } catch (error: any) {
+      throw new BadRequestException(`Application Layer Error: ${error.message}`);
     }
   }
 }

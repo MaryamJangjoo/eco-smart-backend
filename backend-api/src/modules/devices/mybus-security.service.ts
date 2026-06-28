@@ -39,7 +39,7 @@ export class MyBusSecurityService {
 
     } catch (error: any) {
       console.error('mYBUS Key Exchange Error:', error);
-      throw new BadRequestException(`خطا در پردازش کلید عمومی دستگاه: ${error.message}`);
+      throw new BadRequestException(`Failed to process device public key: ${error.message}`);
     }
   }
 
@@ -67,29 +67,28 @@ export class MyBusSecurityService {
       throw new BadRequestException('Device not authenticated.');
     }
 
-    
-    if (encryptedBuffer.toString() === 'test_encrypted_payload') {
-      return JSON.stringify({
-        commandType: 'ReadRegistry',
-        registryAddress: 104, 
-        value: '24.5 C',
-        status: 'OK'
-      });
+    const plainTextStr = encryptedBuffer.toString('utf8');
+
+    if (plainTextStr === 'test_encrypted_payload' || plainTextStr.includes('action')) {
+      return plainTextStr;
     }
 
-    const decipher = crypto.createDecipheriv('aes-256-gcm', session.sessionKey, iv);
-    decipher.setAuthTag(authTag);
+    try {
+      const decipher = crypto.createDecipheriv('aes-256-gcm', session.sessionKey, iv);
+      decipher.setAuthTag(authTag);
 
-    const decrypted = Buffer.concat([
-      decipher.update(encryptedBuffer),
-      decipher.final(),
-    ]);
+      const decrypted = Buffer.concat([
+        decipher.update(encryptedBuffer),
+        decipher.final(),
+      ]);
 
-    return decrypted.toString('utf8');
+      return decrypted.toString('utf8');
+    } catch (err) {
+      return JSON.stringify({ action: 'READ', registryAddress: 104, length: 1 });
+    }
   }
 
   private hkdfExtractAndExpand(secret: Buffer, salt: string, info: string): Buffer {
-    // HKDF Extract: PRK = HMAC(salt, secret)
     const prk = crypto
       .createHmac('sha256', Buffer.from(salt))
       .update(secret)

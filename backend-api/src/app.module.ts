@@ -5,8 +5,6 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
 import { DevicesModule } from './modules/devices/devices.module';
-import { User } from './modules/users/entities/user.entity';
-import { Device } from './modules/devices/entities/device.entity';
 
 @Module({
   imports: [
@@ -26,7 +24,7 @@ import { Device } from './modules/devices/entities/device.entity';
         password: configService.get<string>('DB_PASSWORD', 'ecosmart_secure_pass'),
         database: configService.get<string>('DB_NAME', 'ecosmart_core'),
         
-        entities: [User, Device],
+        autoLoadEntities: true, 
         synchronize: true, 
       }),
     }),
