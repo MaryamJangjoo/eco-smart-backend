@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('devices')
 export class Device {
@@ -6,16 +6,22 @@ export class Device {
   id: string;
 
   @Column({ unique: true })
-  serialNumber: string; 
+  deviceId: string;
 
-  @Column({ type: 'text', nullable: true })
-  certificatePem: string; 
+  @Column({ unique: true })
+  serialNumber: string;
 
-  @Column({ default: false })
-  isActive: boolean; 
+  @Column({ nullable: true })
+  name: string;
 
-  @Column({ type: 'json', nullable: true })
-  metadata: any;
+  @Column({ nullable: true })
+  model: string;
+
+  @Column({ nullable: true })
+  firmwareVersion: string;
+
+  @Column({ default: 'active' })
+  status: string;
 
   @CreateDateColumn()
   createdAt: Date;

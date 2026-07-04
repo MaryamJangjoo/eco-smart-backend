@@ -1,21 +1,44 @@
-// src/modules/devices/devices.controller.ts
-import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { MyBusSecurityService } from './mybus-security.service';
+import { DeviceService } from './device.service';
 import { HandshakeRequestDto } from './dto/handshake-request.dto';
 import { SecureDataRequestDto } from './dto/secure-data-request.dto';
+import { RegisterDeviceDto } from './dto/register-device.dto';
 import { DeviceRegistry } from './entities/device-registry.entity';
+import { Device } from './entities/device.entity';
 
 @ApiTags('Devices')
 @Controller('devices')
 export class DevicesController {
   constructor(
     private readonly securityService: MyBusSecurityService,
+    private readonly deviceService: DeviceService,
     @InjectRepository(DeviceRegistry)
     private readonly registryRepository: Repository<DeviceRegistry>,
   ) {}
+
+  
+  @Post('register')
+  @ApiOperation({ summary: 'Register a new device' })
+  async registerDevice(@Body() dto: RegisterDeviceDto): Promise<Device> {
+    return this.deviceService.register(dto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Get all devices' })
+  async getAllDevices(): Promise<Device[]> {
+    return this.deviceService.findAll();
+  }
+
+  @Get(':deviceId')
+  @ApiOperation({ summary: 'Get device by ID' })
+  async getDeviceById(@Param('deviceId') deviceId: string): Promise<Device> {
+    return this.deviceService.findByDeviceId(deviceId);
+  }
+
 
   @Post('handshake')
   @ApiOperation({ summary: 'Phase 1 & 2: ECDH Handshake and HMAC Challenge' })
@@ -43,7 +66,7 @@ export class DevicesController {
   }
 
   @Post('data')
-  @ApiOperation({ summary: 'Phase 3: Secure Request/Response Packet Engine (TypeORM Connected)' })
+  @ApiOperation({ summary: 'Phase 3: Secure Request/Response Packet Engine' })
   async handleSecureData(@Body() body: SecureDataRequestDto) {
     if (body.security !== 2) {
       throw new BadRequestException('This endpoint only accepts encrypted packets with security=2.');

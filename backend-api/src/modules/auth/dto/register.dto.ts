@@ -1,15 +1,56 @@
-import { IsString, IsEnum, MinLength, IsNotEmpty } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, IsEnum, IsOptional } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../../../common/enums/roles.enum';
 
 export class RegisterDto {
+  @ApiProperty({ example: 'operator_shiraz' })
   @IsString()
-  @IsNotEmpty({ message: 'Username cannot be empty' })
-  username: string;
+  @IsNotEmpty()
+  readonly username: string;
 
+  @ApiProperty({ example: 'operator@ecosmart.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  readonly email: string;
+
+  @ApiProperty({ example: '+989123456789' })
   @IsString()
-  @MinLength(6, { message: 'Password must be at least 6 characters long' })
-  password: string;
+  @IsNotEmpty()
+  readonly phoneNumber: string;
 
-  @IsEnum(UserRole, { message: 'Invalid user role' })
-  role: UserRole;
+  @ApiProperty({ example: 'Maryam' })
+  @IsString()
+  @IsNotEmpty()
+  readonly firstName: string;
+
+  @ApiProperty({ example: 'Jangjoo' })
+  @IsString()
+  @IsNotEmpty()
+  readonly lastName: string;
+
+  @ApiProperty({ example: 'Shiraz, University Blvd...' })
+  @IsString()
+  @IsNotEmpty()
+  readonly address: string;
+
+  @ApiProperty({ example: '7134512345' })
+  @IsString()
+  @IsNotEmpty()
+  readonly postalCode: string;
+
+  @ApiProperty({ example: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...' })
+  @IsString()
+  @IsNotEmpty()
+  readonly publicKey: string;
+
+  @ApiProperty({ example: 'SecurePassword@2026' })
+  @IsString()
+  @MinLength(8)
+  @IsNotEmpty()
+  readonly password: string;
+
+  @ApiProperty({ enum: UserRole, default: UserRole.USER, required: false })
+  @IsEnum(UserRole)
+  @IsOptional()
+  readonly role?: UserRole;
 }

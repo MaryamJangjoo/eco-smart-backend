@@ -9,23 +9,67 @@ services:
       POSTGRES_DB: ecosmart_core
     ports:
       - "5432:5432"
+    volumes:
+      - ./db/postgresql/data:/var/lib/postgresql/data 
     networks:
       - ecosmart_network
-      
+
+  ecosmart_mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ecosmart_mailhog
+    restart: always
+    ports:
+      - "1025:1025"  
+      - "8025:8025"   
+    networks:
+      - ecosmart_network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ecosmart_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    networks:
+      - ecosmart_network
+    depends_on:
+      - postgres_db
 
   backend_api:
     build: ./backend-api
     container_name: ecosmart_backend_api
     restart: always
-    command: sh -c "until nc -z ecosmart_postgres 5432; do echo 'Waiting for Postgres...'; sleep 2; done; npm run start:prod"
+    command: sh -c "
+      until nc -z ecosmart_postgres 5432; do
+        echo '⏳ Waiting for PostgreSQL...';
+        sleep 2;
+      done;
+      until nc -z ecosmart_mailhog 1025; do
+        echo '⏳ Waiting for MailHog...';
+        sleep 2;
+      done;
+      echo '✅ All services ready! Starting NestJS...';
+      npm run start:prod
+      "
     ports:
       - "3000:3000"
     env_file:
       - ./backend-api/.env
+    environment:
+      - SMTP_HOST=ecosmart_mailhog
+      - SMTP_PORT=1025
     networks:
       - ecosmart_network
     depends_on:
       - postgres_db
+      - ecosmart_mailhog
+
+# volumes:
+#   postgres_data:
 
 networks:
   ecosmart_network:

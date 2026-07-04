@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { MailerModule } from '@nestjs-modules/mailer';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
@@ -26,6 +27,22 @@ import { DevicesModule } from './modules/devices/devices.module';
         
         autoLoadEntities: true, 
         synchronize: true, 
+      }),
+    }),
+
+    MailerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        transport: {
+          host: configService.get<string>('MAIL_HOST', 'ecosmart_mailhog'),
+          port: configService.get<number>('MAIL_PORT', 1025),
+          ignoreTLS: true,
+          secure: false,
+        },
+        defaults: {
+          from: '"ECO-SMART Support" <no-reply@ecosmart.local>',
+        },
       }),
     }),
 
