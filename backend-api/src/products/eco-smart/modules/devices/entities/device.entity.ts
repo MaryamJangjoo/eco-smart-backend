@@ -1,4 +1,5 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne } from 'typeorm';
+import { Site } from '../../sites/entities/site.entity';
 
 @Entity('devices')
 export class Device {
@@ -22,6 +23,9 @@ export class Device {
 
   @Column({ default: 'active' })
   status: string;
+
+  @ManyToOne(() => Site, (site) => site.devices, { onDelete: 'CASCADE' })
+  site: Site;
 
   @CreateDateColumn()
   createdAt: Date;

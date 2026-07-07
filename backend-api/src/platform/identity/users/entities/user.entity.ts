@@ -7,7 +7,9 @@ import {
   Index 
 } from 'typeorm';
 import { UserRole } from '../../../../common/enums/roles.enum';
-
+// این خطوط را در صورت نیاز به گرفتن لیست سایت‌های کاربر، به کلاس User اضافه کنید:
+// @OneToMany(() => SiteMember, (siteMember) => siteMember.user)
+// siteMembers: SiteMember[];
 @Entity('users')  
 @Index(['username', 'email', 'phoneNumber'])
 export class User {

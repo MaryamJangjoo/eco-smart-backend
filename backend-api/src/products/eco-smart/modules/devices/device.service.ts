@@ -43,7 +43,12 @@ export class DeviceService {
 
     return device;
   }
-
+  
+  async updateStatus(deviceId: string, status: string): Promise<Device> {
+    const device = await this.findByDeviceId(deviceId);
+    device.status = status;
+    return this.deviceRepository.save(device);
+  }
   async findAll(): Promise<Device[]> {
     return this.deviceRepository.find({
       order: { createdAt: 'DESC' }

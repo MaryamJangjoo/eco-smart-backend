@@ -1,19 +1,21 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Device } from './entities/device.entity';
-import { DeviceRegistry } from './entities/device-registry.entity';
 import { DevicesController } from './devices.controller';
 import { DeviceService } from './device.service';
-import { MyBusSecurityService } from '../../../../infrastructure/mybus/mybus-security.service';
+import { SiteMember } from '../sites/entities/site-member.entity';
+import { MyBusModule } from '../../../../infrastructure/mybus/mybus.module';
+
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Device, DeviceRegistry]), 
+    TypeOrmModule.forFeature([Device, SiteMember]),
+    
+    MyBusModule,
   ],
   controllers: [DevicesController],
   providers: [
-    DeviceService,           
-    MyBusSecurityService,
+    DeviceService,
   ],
-  exports: [DeviceService, MyBusSecurityService],
+  exports: [DeviceService, TypeOrmModule], 
 })
 export class DevicesModule {}

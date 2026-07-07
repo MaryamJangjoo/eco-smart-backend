@@ -7,6 +7,8 @@ import { UsersModule } from '../platform/identity/users/users.module';
 import { MyBusModule } from '../infrastructure/mybus/mybus.module';
 import { HealthModule } from './health/health.module';
 import { DevicesModule } from '../products/eco-smart/modules/devices/devices.module';
+import { SitesModule } from '../products/eco-smart/modules/sites/sites.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -45,10 +47,10 @@ import { DevicesModule } from '../products/eco-smart/modules/devices/devices.mod
     }),
 
     MyBusModule,
-
     AuthModule,
     UsersModule,
     HealthModule,
+    SitesModule,   
     DevicesModule, 
   ],
 })

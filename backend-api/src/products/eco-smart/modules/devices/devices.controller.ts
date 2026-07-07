@@ -1,13 +1,12 @@
-import { Controller, Post, Get, Body, Param, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Controller, Post, Get, Body, Param, BadRequestException, UseGuards, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
-import { DeviceService } from './device.service';import { MyBusSecurityService } from '../../../../infrastructure/mybus/mybus-security.service';
+import { DeviceService } from './device.service';
+import { MyBusSecurityService } from '../../../../infrastructure/mybus/mybus-security.service';
 import { HandshakeRequestDto } from './dto/handshake-request.dto';
 import { SecureDataRequestDto } from './dto/secure-data-request.dto';
 import { RegisterDeviceDto } from './dto/register-device.dto';
-import { DeviceRegistry } from './entities/device-registry.entity';
 import { Device } from './entities/device.entity';
+import { DeviceAccessGuard } from './guards/device-access.guard';
 
 @ApiTags('Devices')
 @Controller('devices')
@@ -15,11 +14,8 @@ export class DevicesController {
   constructor(
     private readonly securityService: MyBusSecurityService,
     private readonly deviceService: DeviceService,
-    @InjectRepository(DeviceRegistry)
-    private readonly registryRepository: Repository<DeviceRegistry>,
   ) {}
 
-  
   @Post('register')
   @ApiOperation({ summary: 'Register a new device' })
   async registerDevice(@Body() dto: RegisterDeviceDto): Promise<Device> {
@@ -34,10 +30,10 @@ export class DevicesController {
 
   @Get(':deviceId')
   @ApiOperation({ summary: 'Get device by ID' })
+  @UseGuards(DeviceAccessGuard) 
   async getDeviceById(@Param('deviceId') deviceId: string): Promise<Device> {
     return this.deviceService.findByDeviceId(deviceId);
   }
-
 
   @Post('handshake')
   @ApiOperation({ summary: 'Phase 1 & 2: ECDH Handshake and HMAC Challenge' })
@@ -66,6 +62,7 @@ export class DevicesController {
 
   @Post('data')
   @ApiOperation({ summary: 'Phase 3: Secure Request/Response Packet Engine' })
+  @UseGuards(DeviceAccessGuard) 
   async handleSecureData(@Body() body: SecureDataRequestDto) {
     if (body.security !== 2) {
       throw new BadRequestException('This endpoint only accepts encrypted packets with security=2.');
@@ -90,42 +87,23 @@ export class DevicesController {
 
       switch (myBusPayload.action) {
         case 'READ': {
-          let registry = await this.registryRepository.findOne({
-            where: { deviceId, registryAddress: myBusPayload.registryAddress }
-          });
-
-          const resultValue = registry ? registry.value : '24.5';
-
+          const device = await this.deviceService.findByDeviceId(deviceId);
           applicationResponse = {
             action: 'READ_REPLY',
             registryAddress: myBusPayload.registryAddress,
-            value: resultValue,
-            status: registry ? registry.status : 'DEFAULT_MOCK'
+            value: device.status === 'active' ? '24.5' : '0', 
+            status: device.status
           };
           break;
         }
 
         case 'WRITE': {
-          let registry = await this.registryRepository.findOne({
-            where: { deviceId, registryAddress: myBusPayload.registryAddress }
-          });
-
-          if (!registry) {
-            registry = this.registryRepository.create({
-              deviceId,
-              registryAddress: myBusPayload.registryAddress,
-            });
-          }
-
-          registry.value = String(myBusPayload.value);
-          registry.status = 'OK';
-          await this.registryRepository.save(registry);
-
+          const updatedDevice = await this.deviceService.updateStatus(deviceId, 'active');
           applicationResponse = {
             action: 'WRITE_REPLY',
             registryAddress: myBusPayload.registryAddress,
             status: 'SUCCESS',
-            message: `Database entry persisted. Registry ${myBusPayload.registryAddress} is now set to ${myBusPayload.value}`
+            message: `mYbus control packet executed. Device is now active.`
           };
           break;
         }
