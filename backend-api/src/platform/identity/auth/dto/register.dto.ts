@@ -1,7 +1,6 @@
 import { IsEmail, IsNotEmpty, IsString, MinLength, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '../../../common/enums/roles.enum';
-
+import { UserRole } from '../../../../common/enums/roles.enum';
 export class RegisterDto {
   @ApiProperty({ example: 'operator_shiraz' })
   @IsString()

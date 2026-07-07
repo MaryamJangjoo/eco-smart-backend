@@ -1,4 +1,4 @@
-ن# Environment variables
+#Environment variables
 .env
 .env.*
 !.env.example
@@ -90,3 +90,15 @@ docker-compose.override.yml
 # Project specific files
 query.js
 schema.json
+
+# Tools & Temporary structures
+tree.exe
+tree.zip
+tree-structure.txt
+project-structure.txt
+
+# Architecture Docs (Parent directory)
+../CURRENT_ARCHITECTURE_ASSESSMENT.md
+../MIGRATION_CHECKLIST.md
+../MODULE_INVENTORY.md
+../project-tree.txt

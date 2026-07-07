@@ -19,8 +19,8 @@ import { ForgotPasswordPhoneDto } from './dto/forgot-password-phone.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyPhoneDto } from './dto/verify-phone.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';  
-import { AccountingInterceptor } from '../../common/interceptors/accounting.interceptor';
-import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
+import { AccountingInterceptor } from '../../../common/interceptors/accounting.interceptor';
+import { JwtRefreshGuard } from '../../../common/guards/jwt-refresh.guard';
 
 @ApiTags('Authentication')
 @Controller('auth')

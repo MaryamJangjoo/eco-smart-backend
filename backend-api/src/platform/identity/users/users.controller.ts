@@ -1,10 +1,10 @@
 import { Controller, Get, Req, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../../common/enums/roles.enum';
-import { AccountingInterceptor } from '../../common/interceptors/accounting.interceptor';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../common/enums/roles.enum';
+import { AccountingInterceptor } from '../../../common/interceptors/accounting.interceptor';
 
 @ApiTags('Users Profiling')
 @ApiBearerAuth()

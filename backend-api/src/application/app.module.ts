@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MailerModule } from '@nestjs-modules/mailer';
-import { AuthModule } from './modules/auth/auth.module';
-import { UsersModule } from './modules/users/users.module';
-import { HealthModule } from './modules/health/health.module';
-import { DevicesModule } from './modules/devices/devices.module';
-
+import { AuthModule } from '../platform/identity/auth/auth.module';
+import { UsersModule } from '../platform/identity/users/users.module';
+import { MyBusModule } from '../infrastructure/mybus/mybus.module';
+import { HealthModule } from './health/health.module';
+import { DevicesModule } from '../products/eco-smart/modules/devices/devices.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -20,11 +20,9 @@ import { DevicesModule } from './modules/devices/devices.module';
         type: 'postgres',
         host: configService.get<string>('DB_HOST', 'ecosmart_postgres'), 
         port: configService.get<number>('DB_PORT', 5432),
-        
         username: configService.get<string>('DB_USER', 'ecosmart_admin'),
         password: configService.get<string>('DB_PASSWORD', 'ecosmart_secure_pass'),
         database: configService.get<string>('DB_NAME', 'ecosmart_core'),
-        
         autoLoadEntities: true, 
         synchronize: true, 
       }),
@@ -45,6 +43,8 @@ import { DevicesModule } from './modules/devices/devices.module';
         },
       }),
     }),
+
+    MyBusModule,
 
     AuthModule,
     UsersModule,

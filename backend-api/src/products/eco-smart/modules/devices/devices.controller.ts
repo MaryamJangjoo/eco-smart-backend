@@ -2,8 +2,7 @@ import { Controller, Post, Get, Body, Param, BadRequestException } from '@nestjs
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
-import { MyBusSecurityService } from './mybus-security.service';
-import { DeviceService } from './device.service';
+import { DeviceService } from './device.service';import { MyBusSecurityService } from '../../../../infrastructure/mybus/mybus-security.service';
 import { HandshakeRequestDto } from './dto/handshake-request.dto';
 import { SecureDataRequestDto } from './dto/secure-data-request.dto';
 import { RegisterDeviceDto } from './dto/register-device.dto';

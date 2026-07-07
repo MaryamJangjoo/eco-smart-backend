@@ -7,7 +7,7 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main.js"
+    "start:prod": "node dist/application/main.js"
   },
   "dependencies": {
     "@nestjs-modules/mailer": "^2.0.2",
