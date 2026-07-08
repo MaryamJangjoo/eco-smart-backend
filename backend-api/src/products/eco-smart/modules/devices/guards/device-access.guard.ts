@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, ForbiddenException, NotFound
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Device } from '../entities/device.entity';
-import { SiteMember } from '../../sites/entities/site-member.entity';
+import { SitesService } from '../../sites/sites.service';
 
 @Injectable()
 export class DeviceAccessGuard implements CanActivate {
@@ -10,15 +10,15 @@ export class DeviceAccessGuard implements CanActivate {
     @InjectRepository(Device)
     private readonly deviceRepository: Repository<Device>,
 
-    @InjectRepository(SiteMember)
-    private readonly siteMemberRepository: Repository<SiteMember>,
+    private readonly sitesService: SitesService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
+    const userId = user ? (user.sub || user.id) : undefined;
 
-    if (!user || !user.id) {
+    if (!userId) {
       throw new ForbiddenException('User is not authenticated.');
     }
 
@@ -40,12 +40,9 @@ export class DeviceAccessGuard implements CanActivate {
       throw new NotFoundException('This device is not yet connected to any site.');
     }
 
-    const hasAccess = await this.siteMemberRepository.findOne({
-      where: {
-        site: { id: device.site.id },
-        user: { id: user.id },
-      },
-    });
+    // Access is granted if the user owns the site's parent Client, or is a
+    // SiteMember of the device's site — same rule SitesService uses.
+    const hasAccess = await this.sitesService.hasAccess(userId, device.site.id);
 
     if (!hasAccess) {
       throw new ForbiddenException('You do not have permission to access this device\'s site.');

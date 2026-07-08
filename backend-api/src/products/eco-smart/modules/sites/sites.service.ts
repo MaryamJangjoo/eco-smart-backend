@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Site } from './entities/site.entity';
 import { SiteMember, SiteRole } from './entities/site-member.entity';
 import { User } from '../../../../platform/identity/users/entities/user.entity';
+import { ClientsService } from '../clients/clients.service';
+
 @Injectable()
 export class SitesService {
   constructor(
@@ -15,20 +17,26 @@ export class SitesService {
 
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+
+    private readonly clientsService: ClientsService,
   ) {}
 
-  async createSite(name: string, ownerId: string): Promise<Site> {
+  async createSite(name: string, clientId: string, ownerId: string): Promise<Site> {
     const user = await this.userRepository.findOne({ where: { id: ownerId } });
     if (!user) {
       throw new NotFoundException('Creator user not found.');
     }
 
-    const site = this.siteRepository.create({ name });
+    // Throws ForbiddenException/NotFoundException if the client doesn't
+    // exist or isn't owned by this user.
+    const client = await this.clientsService.verifyOwnership(clientId, ownerId);
+
+    const site = this.siteRepository.create({ name, client });
     const savedSite = await this.siteRepository.save(site);
 
     const memberAssignment = this.memberRepository.create({
       site: savedSite,
-      user: user,
+      user,
       role: SiteRole.OWNER,
     });
     await this.memberRepository.save(memberAssignment);
@@ -72,5 +80,47 @@ export class SitesService {
     });
 
     return await this.memberRepository.save(newMember);
+  }
+
+  /**
+   * A site is visible to a user either because they own the parent Client,
+   * or because they've been explicitly added as a SiteMember.
+   */
+  async findAllForUser(userId: string): Promise<Site[]> {
+    return this.siteRepository
+      .createQueryBuilder('site')
+      .leftJoin('site.client', 'client')
+      .leftJoin('client.owner', 'clientOwner')
+      .leftJoin('site.members', 'member')
+      .leftJoin('member.user', 'memberUser')
+      .where('clientOwner.id = :userId', { userId })
+      .orWhere('memberUser.id = :userId', { userId })
+      .getMany();
+  }
+
+  /**
+   * Same access rule as findAllForUser, but for a single known site.
+   * Used by DeviceAccessGuard so device access follows the same
+   * client-ownership-or-membership rule as sites do.
+   */
+  async hasAccess(userId: string, siteId: string): Promise<boolean> {
+    const site = await this.siteRepository.findOne({
+      where: { id: siteId },
+      relations: ['client', 'client.owner'],
+    });
+
+    if (!site) {
+      return false;
+    }
+
+    if (site.client?.owner?.id === userId) {
+      return true;
+    }
+
+    const membership = await this.memberRepository.findOne({
+      where: { site: { id: siteId }, user: { id: userId } },
+    });
+
+    return !!membership;
   }
 }

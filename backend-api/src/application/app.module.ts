@@ -8,25 +8,26 @@ import { MyBusModule } from '../infrastructure/mybus/mybus.module';
 import { HealthModule } from './health/health.module';
 import { DevicesModule } from '../products/eco-smart/modules/devices/devices.module';
 import { SitesModule } from '../products/eco-smart/modules/sites/sites.module';
+import { ClientsModule } from '../products/eco-smart/modules/clients/clients.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    
+
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: configService.get<string>('DB_HOST', 'ecosmart_postgres'), 
+        host: configService.get<string>('DB_HOST', 'ecosmart_postgres'),
         port: configService.get<number>('DB_PORT', 5432),
         username: configService.get<string>('DB_USER', 'ecosmart_admin'),
         password: configService.get<string>('DB_PASSWORD', 'ecosmart_secure_pass'),
         database: configService.get<string>('DB_NAME', 'ecosmart_core'),
-        autoLoadEntities: true, 
-        synchronize: true, 
+        autoLoadEntities: true,
+        synchronize: true,
       }),
     }),
 
@@ -50,8 +51,9 @@ import { SitesModule } from '../products/eco-smart/modules/sites/sites.module';
     AuthModule,
     UsersModule,
     HealthModule,
-    SitesModule,   
-    DevicesModule, 
+    ClientsModule,
+    SitesModule,
+    DevicesModule,
   ],
 })
 export class AppModule {}
