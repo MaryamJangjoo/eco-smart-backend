@@ -243,7 +243,6 @@ export class AuthService {
 
     await this.tokenRepository.save(resetRecord);
 
-    // ارسال ایمیل
     await this.mailerService.sendMail({
       to: email,
       subject: '🔐 ECO-SMART - Password Reset Code',

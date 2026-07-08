@@ -1,0 +1,86 @@
+.
+|-- CURRENT_ARCHITECTURE_ASSESSMENT.md
+|-- MODULE_INVENTORY.md
+|-- backend-api
+|   |-- Dockerfile
+|   |-- encrypt-mybus.js
+|   |-- generate-hmac.js
+|   |-- generate-key.js
+|   |-- package-lock.json
+|   |-- package.json
+|   |-- project-structure.txt
+|   |-- query.js
+|   |-- schema.json
+|   |-- src
+|   |   |-- app.module.ts
+|   |   |-- common
+|   |   |   |-- auth.constants.ts
+|   |   |   |-- constants
+|   |   |   |-- decorators
+|   |   |   |-- enums
+|   |   |   |-- export
+|   |   |   |-- guards
+|   |   |   |-- interceptors
+|   |   |   |-- interfaces
+|   |   |   |-- middlewares
+|   |   |   `-- roles.enum.ts
+|   |   |-- main.ts
+|   |   `-- modules
+|   |       |-- auth
+|   |       |-- devices
+|   |       |-- health
+|   |       `-- users
+|   |-- tree-structure.txt
+|   |-- tree.exe
+|   |-- tree.zip
+|   `-- tsconfig.json
+|-- db
+|   `-- postgresql
+|       `-- data
+|           |-- PG_VERSION
+|           |-- base
+|           |-- global
+|           |-- pg_commit_ts
+|           |-- pg_dynshmem
+|           |-- pg_hba.conf
+|           |-- pg_ident.conf
+|           |-- pg_logical
+|           |-- pg_multixact
+|           |-- pg_notify
+|           |-- pg_replslot
+|           |-- pg_serial
+|           |-- pg_snapshots
+|           |-- pg_stat
+|           |-- pg_stat_tmp
+|           |-- pg_subtrans
+|           |-- pg_tblspc
+|           |-- pg_twophase
+|           |-- pg_wal
+|           |-- pg_xact
+|           |-- postgresql.auto.conf
+|           |-- postgresql.conf
+|           |-- postmaster.opts
+|           `-- postmaster.pid
+|-- db-schema
+|-- docker-compose.yml
+|-- docs
+|   |-- AI_RULES.md
+|   |-- API_SPEC.md
+|   |-- ARCHITECTURE.md
+|   |-- CURRENT_ARCHITECTURE_ASSESSMENT.md
+|   |-- DATABASE.md
+|   |-- DECISIONS.md
+|   |-- DEPLOYMENT.md
+|   |-- DOMAIN_MODEL.md
+|   |-- EVENT_FLOW.md
+|   |-- MIGRATION_PLAN.md
+|   |-- SEQUENCE_DIAGRAMS.md
+|   |-- SYSTEM_CONSTRAINTS.md
+|   |-- SYSTEM_TRUTH_PRIORITY.md
+|   |-- adr-001-database.md
+|   |-- adr-002-framework.md
+|   `-- adr-adr-003-tokens.md
+|-- package-lock.json
+`-- project-tree.txt
+
+37 directories, 46 files

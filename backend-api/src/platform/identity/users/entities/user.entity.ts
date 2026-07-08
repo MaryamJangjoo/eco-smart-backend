@@ -2,22 +2,20 @@ import {
   Entity, 
   PrimaryGeneratedColumn, 
   Column, 
+  ManyToOne, 
+  OneToMany, 
   CreateDateColumn, 
   UpdateDateColumn,
   Index 
 } from 'typeorm';
-import { UserRole } from '../../../../common/enums/roles.enum';
-// این خطوط را در صورت نیاز به گرفتن لیست سایت‌های کاربر، به کلاس User اضافه کنید:
-// @OneToMany(() => SiteMember, (siteMember) => siteMember.user)
-// siteMembers: SiteMember[];
+import { SiteRole } from '../../../../common/enums/site-role.enum';
+import { Site } from '../../../../products/eco-smart/modules/sites/entities/site.entity';
+
 @Entity('users')  
 @Index(['username', 'email', 'phoneNumber'])
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
-
-  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
-  organizationId: string;
 
   @Column({ unique: true })
   username: string;
@@ -51,10 +49,11 @@ export class User {
 
   @Column({
     type: 'enum',
-    enum: UserRole,
-    default: UserRole.USER,
+    enum: SiteRole,
+    default: SiteRole.VIEWER,
+    nullable: true  
   })
-  role: UserRole;
+  siteRole: SiteRole | null;  
 
   @Column({ name: 'is_email_verified', type: 'boolean', default: false })
   isEmailVerified: boolean;
@@ -63,7 +62,8 @@ export class User {
   isPhoneVerified: boolean;
 
   @Column({ name: 'email_verification_code', type: 'varchar', nullable: true })
-  emailVerificationCode: string; 
+  emailVerificationCode: string;
+
   @Column({ name: 'phone_verification_otp', type: 'varchar', nullable: true })
   phoneVerificationOtp: string;
 
@@ -75,4 +75,12 @@ export class User {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp with time zone' })
   updatedAt: Date;
+
+  @ManyToOne(() => Site, (site) => site.users, { onDelete: 'SET NULL' })
+  site: Site | null;  
+
+  @Column({ nullable: true }) 
+  siteId: string | null; 
+  @OneToMany(() => Site, (site) => site.owner)
+  ownedSites: Site[];
 }

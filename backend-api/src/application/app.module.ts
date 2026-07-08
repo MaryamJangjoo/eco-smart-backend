@@ -8,7 +8,6 @@ import { MyBusModule } from '../infrastructure/mybus/mybus.module';
 import { HealthModule } from './health/health.module';
 import { DevicesModule } from '../products/eco-smart/modules/devices/devices.module';
 import { SitesModule } from '../products/eco-smart/modules/sites/sites.module';
-import { ClientsModule } from '../products/eco-smart/modules/clients/clients.module';
 
 @Module({
   imports: [
@@ -51,7 +50,6 @@ import { ClientsModule } from '../products/eco-smart/modules/clients/clients.mod
     AuthModule,
     UsersModule,
     HealthModule,
-    ClientsModule,
     SitesModule,
     DevicesModule,
   ],

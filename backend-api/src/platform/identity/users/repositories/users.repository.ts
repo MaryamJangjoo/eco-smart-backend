@@ -1,14 +1,11 @@
-import { Repository } from 'typeorm';
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository, IsNull } from 'typeorm';
 import { User } from '../entities/user.entity';
+
 @Injectable()
 export class UsersRepository extends Repository<User> {
-  constructor(
-    @InjectRepository(User)
-    private readonly repository: Repository<User>,
-  ) {
-    super(repository.target, repository.manager, repository.queryRunner);
+  constructor(private dataSource: DataSource) {
+    super(User, dataSource.createEntityManager());
   }
 
   async findByUsername(username: string): Promise<User | null> {
@@ -16,6 +13,25 @@ export class UsersRepository extends Repository<User> {
   }
 
   async findById(id: string): Promise<User | null> {
-    return this.findOne({ where: { id: id as any } });
+    return this.findOne({ where: { id } });
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    return this.findOne({ where: { email } });
+  }
+
+  async findUsersBySite(siteId: string): Promise<User[]> {
+    return this.find({ 
+      where: { site: { id: siteId } },
+      relations: ['site']
+    });
+  }
+
+  async findUsersWithoutSite(): Promise<User[]> {
+    return this.find({ 
+      where: { 
+        siteId: IsNull(),  
+      },
+    });
   }
 }

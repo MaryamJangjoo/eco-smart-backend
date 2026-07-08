@@ -1,11 +1,14 @@
-import { IsEmail, IsNotEmpty, IsUUID } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsEmail, IsUUID } from 'class-validator';
 
 export class ShareSiteDto {
-  @IsNotEmpty({ message: 'Site ID is required.' })
-  @IsUUID('4', { message: 'Site ID must be a valid UUID.' })
+  @ApiProperty({ example: 'site-001' })
+  @IsUUID()
+  @IsNotEmpty()
   siteId: string;
 
-  @IsNotEmpty({ message: 'Recipient email is required.' })
-  @IsEmail({}, { message: 'Please enter a valid email address.' })
+  @ApiProperty({ example: 'user@example.com' })
+  @IsEmail()
+  @IsNotEmpty()
   email: string;
 }

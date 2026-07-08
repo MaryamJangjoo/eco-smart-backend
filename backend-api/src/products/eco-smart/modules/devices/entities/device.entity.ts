@@ -1,4 +1,11 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne } from 'typeorm';
+import { 
+  Entity, 
+  PrimaryGeneratedColumn, 
+  Column, 
+  ManyToOne, 
+  CreateDateColumn, 
+  UpdateDateColumn 
+} from 'typeorm';
 import { Site } from '../../sites/entities/site.entity';
 
 @Entity('devices')
@@ -12,7 +19,7 @@ export class Device {
   @Column({ unique: true })
   serialNumber: string;
 
-  @Column({ nullable: true })
+  @Column()
   name: string;
 
   @Column({ nullable: true })
@@ -24,12 +31,18 @@ export class Device {
   @Column({ default: 'active' })
   status: string;
 
-  @ManyToOne(() => Site, (site) => site.devices, { onDelete: 'CASCADE' })
-  site: Site;
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: Record<string, any>;
 
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @ManyToOne(() => Site, (site) => site.devices, { onDelete: 'CASCADE' })
+  site: Site;
+
+  @Column()
+  siteId: string;
 }

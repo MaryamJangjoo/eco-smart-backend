@@ -36,13 +36,13 @@ export class AuthController {
       registerDto.username,
       registerDto.email,
       registerDto.password,
-      registerDto.role ? registerDto.role.toString() : 'user',
+      'user',  
       registerDto.phoneNumber,
       registerDto.firstName,
       registerDto.lastName,
-      registerDto.address,
-      registerDto.postalCode,
-      registerDto.publicKey,
+      registerDto.address || '',
+      registerDto.postalCode || '',
+      registerDto.publicKey || '',
     );
   }
 

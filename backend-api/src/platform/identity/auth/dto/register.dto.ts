@@ -1,55 +1,51 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '../../../../common/enums/roles.enum';
+import { IsString, IsNotEmpty, IsEmail, IsOptional, MinLength } from 'class-validator';
+
 export class RegisterDto {
-  @ApiProperty({ example: 'operator_shiraz' })
+  @ApiProperty({ example: 'test_operator' })
   @IsString()
   @IsNotEmpty()
-  readonly username: string;
+  username: string;
 
-  @ApiProperty({ example: 'operator@ecosmart.com' })
+  @ApiProperty({ example: 'test@ecosmart.com' })
   @IsEmail()
   @IsNotEmpty()
-  readonly email: string;
+  email: string;
 
   @ApiProperty({ example: '+989123456789' })
   @IsString()
   @IsNotEmpty()
-  readonly phoneNumber: string;
+  phoneNumber: string;
 
-  @ApiProperty({ example: 'Maryam' })
+  @ApiProperty({ example: 'Test' })
   @IsString()
   @IsNotEmpty()
-  readonly firstName: string;
+  firstName: string;
 
-  @ApiProperty({ example: 'Jangjoo' })
+  @ApiProperty({ example: 'User' })
   @IsString()
   @IsNotEmpty()
-  readonly lastName: string;
+  lastName: string;
 
-  @ApiProperty({ example: 'Shiraz, University Blvd...' })
+  @ApiProperty({ example: 'Tehran, Iran', required: false })
   @IsString()
-  @IsNotEmpty()
-  readonly address: string;
+  @IsOptional()
+  address?: string;
 
-  @ApiProperty({ example: '7134512345' })
+  @ApiProperty({ example: '1234567890', required: false })
   @IsString()
-  @IsNotEmpty()
-  readonly postalCode: string;
+  @IsOptional()
+  postalCode?: string;
 
-  @ApiProperty({ example: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...' })
+  @ApiProperty({ example: '-----BEGIN PUBLIC KEY-----...', required: false })
   @IsString()
-  @IsNotEmpty()
-  readonly publicKey: string;
+  @IsOptional()
+  publicKey?: string;
 
   @ApiProperty({ example: 'SecurePassword@2026' })
   @IsString()
   @MinLength(8)
   @IsNotEmpty()
-  readonly password: string;
+  password: string;
 
-  @ApiProperty({ enum: UserRole, default: UserRole.USER, required: false })
-  @IsEnum(UserRole)
-  @IsOptional()
-  readonly role?: UserRole;
 }
