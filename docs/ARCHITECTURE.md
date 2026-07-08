@@ -2,338 +2,245 @@
 
 ## Status
 
-* **Version:** 2.0.0
-* **Date:** June 29, 2026
+* **Version:** 3.0.0
+* **Date:** July 08, 2026
 * **Classification:** Proprietary / Confidential
 * **Author:** Lead Software Architect
 * **Target Audience:** Engineering Teams, AI Coding Assistants, System Integrators
+* **Document Type:** CURRENT STATE — this document describes the system as it exists in the repository today. It does not describe target, planned, or aspirational architecture. Any future direction belongs in a separate roadmap document, not here.
 
 ---
 
 ## 1. Project Vision
 
-The ECO-SMART platform is a highly resilient, low-latency, enterprise-grade distributed system engineered for automated energy optimization and hardware lifecycle orchestration in modern commercial and residential infrastructure. The system bridges cloud-based microservices with real-time edge building-automation networks to execute deterministic data processing, analytical insights, and low-latency closed-loop hardware control.
+ECO-SMART is a NestJS backend for provisioning and operating smart building/energy devices. A `User` owns or belongs to a `Site`, and a `Site` contains `Device`s. Devices communicate with the backend using a proprietary handshake-and-encrypted-payload protocol referred to internally as **mYBUS**.
+
+This document intentionally omits any component not present in the codebase as of this version. Previous revisions referenced a FastAPI gateway, a Blazor WebAssembly client, gRPC transport, and a Redis-backed event bus — **none of these exist in the repository**. They have been removed from this document. If they are built in the future, this document must be updated at that time, not before.
 
 ---
 
-## 2. System Goals
+## 2. What Actually Exists Today
 
-* **Deterministic Latency:** Maximum end-to-end telemetry-to-command loop latency MUST NOT exceed 200 milliseconds.
-* **High Availability:** Core orchestration layers MUST maintain a 99.95% uptime SLA, operating gracefully under hardware disconnects.
-* **Strict Auditability:** Every transaction, user state change, and physical device state mutation MUST be cryptographically immutable and permanently audited.
-* **Hardware Agnosticism:** The software core MUST remain completely separated from underlying hardware topologies via an abstract physical-device payload-mapping architecture.
-
----
-
-## 3. High-Level Architecture
+* **One deployable service:** a single NestJS application (`backend-api`), built and run as one Docker container (`ecosmart_backend_api`).
+* **One database:** PostgreSQL, accessed via TypeORM with `synchronize: true` and `autoLoadEntities: true` (see §7 for the risk this carries).
+* **One outbound mail dependency:** MailHog (local dev SMTP), wired through `@nestjs-modules/mailer`.
+* **No Redis, no message broker, no gRPC, no separate gateway process, and no frontend code** in this repository.
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                   Client Dashboard                     │
-│               (Blazor WebAssembly App)                 │
-└───────────────────────────┬────────────────────────────┘
-                            │ HTTPS / Secure WebSockets
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│                  FastAPI Gateway                       │
-│            (Reverse Proxy & Rate Limiter)              │
-└───────────────────────────┬────────────────────────────┘
-                            │ Internal gRPC / IPC
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│                 NestJS Backend Core                    │
-│          (Auth, Core Logic, Audit Logging)             │
-└──────┬────────────────────┬────────────────────┬───────┘
-       │ TypeORM            │ Redis              │ Internal Event Bus
-       ▼                    ▼                    ▼
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  PostgreSQL  │     │ Cache & Lock │     │ mYBUS-v2 Mgmt│
-│  (Database)  │     │   (Redis)    │     │ Microservice │
-└──────────────┘     └──────────────┘     └──────┬───────┘
-                                                 │ Proprietary TCP/IP
-                                                 ▼
-                                          ┌──────────────┐
-                                          │ Smart Edge   │
-                                          │ Controllers  │
-                                          └──────────────┘
-
+┌────────────────────────────┐
+│   HTTP Client (any)         │
+└──────────────┬───────────────┘
+               │ HTTPS/HTTP, JSON, Authorization: Bearer <token>
+               ▼
+┌───────────────────────────────────────────┐
+│           NestJS Backend (single process)   │
+│  application/  →  bootstraps app             │
+│  platform/identity/  →  auth + users          │
+│  products/eco-smart/modules/  →  sites, devices│
+│  infrastructure/mybus/  →  device crypto layer │
+└──────────────┬───────────────┬───────────────┘
+               │ TypeORM         │ SMTP
+               ▼                 ▼
+      ┌──────────────┐   ┌──────────────┐
+      │  PostgreSQL   │   │   MailHog    │
+      └──────────────┘   └──────────────┘
 ```
 
----
-
-## 4. Backend Architecture
-
-The backend application core utilizes a highly modular NestJS runtime framework layered over Node.js. It interfaces directly with PostgreSQL using TypeORM for permanent entity storage and features an independent microservice subsystem dedicated exclusively to the translation and handling of the low-level, proprietary `mYBUS-v2` building automation protocol.
+Devices talk to the same NestJS process directly over HTTP (`/devices/handshake`, `/devices/data`) — there is no separate gateway or protocol translation service.
 
 ---
 
-## 5. Folder Structure
+## 3. Domain Model (Current)
 
-The monolithic and microservice backend codebases MUST strictly comply with the following directory tree layout. Deviation from this architecture is prohibited.
+Three entities exist. There is no fourth entity, no `SiteMember` join table, and no `Client`/tenant concept.
 
-```
-src/
-├── config/                  # Global environmental and application configuration
-├── common/                  # Shared decorators, guards, interceptors, and filters
-│   ├── constants/
-│   ├── decorators/
-│   ├── filters/
-│   ├── guards/
-│   └── interceptors/
-├── database/                # Migrations, seeds, and database configuration factories
-│   ├── migrations/
-│   └── seeds/
-└── modules/                 # Encapsulated vertical feature modules
-    ├── auth/                # Identity management, authentication, and tokens
-    │   ├── controllers/
-    │   ├── dto/
-    │   ├── entities/
-    │   ├── services/
-    │   └── strategies/
-    ├── users/               # Account definitions and user domain profiles
-    ├── devices/             # Device definitions and status fields
-    └── telemetry/           # Time-series message intake and analytical endpoints
+* **User** — `users` table. Belongs to at most one `Site` at a time (`user.siteId`, `user.siteRole`). May separately own zero or more `Site`s (`user.ownedSites`, via `Site.ownerId`).
+* **Site** — `sites` table. Has one owner (`Site.owner` → `User`), has zero or more member `User`s (`Site.users`, one-to-many via `user.siteId`), and has zero or more `Device`s.
+* **Device** — `devices` table. Belongs to exactly one `Site` (`ManyToOne`, `onDelete: 'CASCADE'`).
 
-```
+Supporting entities that exist but are not core domain concepts:
+* **PasswordReset** (`password_resets` table) — short-lived reset codes for email/phone flows.
+* **DeviceRegistry** (`device_registries` table) — stores individual `(deviceId, registryAddress) → value` pairs used by the mYBUS `READ`/`WRITE` application layer; distinct from the `Device` entity itself.
 
----
+```mermaid
+erDiagram
+    USER ||--o{ SITE : owns
+    SITE ||--o{ USER : "has members (siteId)"
+    SITE ||--o{ DEVICE : contains
+    DEVICE ||--o{ DEVICE_REGISTRY : "has registry values"
 
-## 6. Module Responsibilities
-
-### 6.1. AuthModule
-
-MUST isolate all procedures related to credential management, JWT issuance, session revocations, password hashing, and multi-tenant access control lists.
-
-### 6.2. UsersModule
-
-MUST manage user entity persistency, access profiles, and multi-factor validation states. It MUST NOT perform direct authentication challenges.
-
-### 6.3. DevicesModule
-
-MUST hold structural state, configurations, virtual mappings, firmware versions, and operational boundaries of all edge hardware targets.
-
-### 6.4. TelemetryModule
-
-MUST act as an optimized high-throughput buffer for sensor metrics, performance values, and error reports coming from downstream networks.
-
----
-
-## 7. Coding Standards
-
-* **Strict Typing:** The `any` implicit or explicit data type MUST NOT be committed to the codebase under any condition. If a type cannot be explicitly deduced, developer MUST use structural generics or strict `unknown` validation checks.
-* **Immutability:** Variables SHOULD default to `const`. Mutable `let` references MUST only be scoped within mathematical loops or variable re-assignments.
-* **Strict Null Verification:** All runtime references interacting with properties that can return null or undefined MUST use explicit optional chaining (`?.`) or deterministic nullish coalescing operators (`??`).
-
----
-
-## 8. Naming Conventions
-
-* **Files:** All system files MUST use kebab-case identifiers specifying the exact role type (e.g., `device-registration.controller.ts`, `user-session.entity.ts`).
-* **Classes and Types:** Classes, Interfaces, and Type definitions MUST use PascalCase formatting (e.g., `AuthService`, `JwtAccessStrategy`).
-* **Variables, Methods, and Functions:** All local variables, properties, functions, and class methods MUST use camelCase naming (e.g., `generateAccessToken`, `userId`).
-* **Database Objects:** Tables, column descriptions, and primary keys stored in PostgreSQL MUST use strictly lowercase snake_case (e.g., `user_accounts`, `refresh_token_hash`).
-
----
-
-## 9. DTO Guidelines
-
-* **Validation Immutability:** DTO classes MUST utilize the `class-validator` package with properties marked with the `readonly` TS keyword.
-* **Completeness:** DTOs MUST contain comprehensive decorator sets representing formatting and baseline limits (e.g., `@IsUUID()`, `@IsString()`, `@MinLength(8)`).
-* **Context Safety:** Entities MUST NEVER be exposed directly on HTTP endpoints. Incoming network requests and outbound payload objects MUST have dedicated DTO definitions.
-
----
-
-## 10. Entity Guidelines
-
-* **Primary Keys:** Every database table entity mapped by TypeORM MUST employ a cryptographically strong Universally Unique Identifier (`UUIDv4`) as its primary cluster identifier column.
-* **Implicit Tracking:** All standard data tables MUST inherit a baseline class structure containing `created_at`, `updated_at`, and a hidden `version` concurrency verification count field.
-* **Relationship Strictness:** Cascading deletion flags on table schemas MUST NOT be implemented without explicit written review from the lead DB architect.
-
----
-
-## 11. Repository Rules
-
-* **Isolation of Storage:** Business operational flow structures MUST remain unaware of low-level SQL mechanics. All raw data lookup mechanics MUST be bound cleanly within repository definitions.
-* **No Active Record Pattern:** The Active Record design model is strictly prohibited. All persistence actions MUST use the TypeORM Data Mapper model via custom repositories or native EntityManager dependencies.
-
----
-
-## 12. Service Rules
-
-* **Single Functional Focus:** Services MUST contain stateless processing rules and transaction limits. No HTTP request structures or raw socket payloads are allowed inside service layers.
-* **State Injection Constraints:** Services MUST remain entirely stateless. Member properties on standard scoped singleton instances MUST NOT retain user-specific data during operational intervals.
-
----
-
-## 13. Controller Rules
-
-* **Minimal Logic:** Controller methods MUST act as straightforward protocol routers. No business rules, complex validation calculations, or database alterations are allowed within a controller method.
-* **Clean Contract Serialization:** Controllers MUST rely completely on global interceptors to cleanly process and format outward HTTP response codes and structures.
-
----
-
-## 14. Authentication Flow
-
-```
-Client                      AuthGateway                    Database
-  │                              │                            │
-  │─── POST /auth/login ────────►│                            │
-  │    (Credentials)             │─── Verify User Check ─────►│
-  │                              │◄── Return Password Hash ───│
-  │                              │                            │
-  │                              │─── Store Session Token ───►│
-  │◄── Set HttpOnly Cookies ─────│                            │
-  │    (Access & Refresh Tokens) │                            │
-
+    USER {
+        uuid id
+        string username
+        string email
+        string phoneNumber
+        string passwordHash
+        enum siteRole "nullable: OWNER, ADMIN, EDITOR, VIEWER"
+        uuid siteId "nullable, the one site this user belongs to"
+    }
+    SITE {
+        uuid id
+        string name
+        uuid ownerId
+    }
+    DEVICE {
+        uuid id
+        string deviceId
+        string serialNumber
+        uuid siteId
+    }
+    DEVICE_REGISTRY {
+        uuid id
+        string deviceId
+        integer registryAddress
+        string value
+    }
 ```
 
-1. The client MUST submit secure identifiers exclusively over an encrypted HTTPS connection.
-2. The authorization service MUST fetch user metadata alongside salted password fields from storage.
-3. The server MUST generate twin JWT items: a short-lived `AccessToken` and an isolated `RefreshToken`.
-4. The system MUST compute a one-way secure hash of the `RefreshToken` and save it directly inside the target database.
-5. Outbound responses MUST embed token structures inside `HttpOnly`, `Secure`, `SameSite=Strict` browser storage configurations.
+**Important asymmetry to be aware of:** a `User` can only belong to one `Site` at a time as a member (single `siteId` column), but can *own* multiple `Site`s independently of that membership. There is no many-to-many membership table. If multi-site membership per user is ever required, this is a schema change, not a bug fix.
 
 ---
 
-## 15. Device Registration Flow
+## 4. Folder Structure (as it exists)
 
-1. An operator MUST pass a targeted physical device hardware identifier (MAC or Unique Chip ID) into the registration system dashboard.
-2. The platform core MUST cross-match the submitted target signature against an authorized physical inventory table.
-3. Upon validation, the engine MUST generate a strong device-scoped cryptographic credential pair (`Client-ID` and `Secret-Key`).
-4. The system MUST save the encrypted device hash to disk while setting the initial operational status flag to `PENDING_PROVISION`.
+```
+backend-api/src/
+├── application/
+│   ├── main.ts                   # bootstrap: CORS, ValidationPipe, Swagger, listen(3000)
+│   ├── app.module.ts             # root module, wires TypeOrmModule/MailerModule/all feature modules
+│   └── health/                   # HealthController — GET /health
+├── common/
+│   ├── constants/auth.constants.ts
+│   ├── auth.constants.ts         # duplicate of the above — should be deleted
+│   ├── export                    # extensionless file, duplicate content — should be deleted
+│   ├── decorators/roles.decorator.ts     # @Roles(...SiteRole[])
+│   ├── enums/site-role.enum.ts           # SiteRole: OWNER, ADMIN, EDITOR, VIEWER
+│   ├── roles.enum.ts                     # UserRole: ADMIN, OPERATOR, USER — unused legacy enum, not referenced by any guard or entity; candidate for deletion (see §8)
+│   ├── guards/jwt-auth.guard.ts          # AuthGuard('jwt')
+│   ├── guards/jwt-refresh.guard.ts       # AuthGuard('jwt-refresh')
+│   ├── guards/roles.guard.ts             # checks user.siteRole against @Roles metadata
+│   ├── interceptors/accounting.interceptor.ts  # audit-log interceptor, see §6
+│   ├── interfaces/jwt-payload.interface.ts     # currently empty
+│   └── middlewares/request-context.middleware.ts # currently empty
+├── platform/identity/
+│   ├── auth/
+│   │   ├── auth.module.ts, auth.controller.ts, auth.service.ts
+│   │   ├── jwt-access.strategy.ts, jwt-refresh.strategy.ts
+│   │   ├── dto/ (login, register, refresh-token, forgot-password[-phone], reset-password, verify-email, verify-phone)
+│   │   └── entities/password-reset.entity.ts
+│   └── users/
+│       ├── users.module.ts, users.controller.ts, users.service.ts
+│       ├── repositories/users.repository.ts
+│       └── entities/user.entity.ts
+├── infrastructure/mybus/
+│   ├── mybus.module.ts           # @Global() module
+│   └── mybus-security.service.ts # ECDH, HKDF, AES-256-GCM, in-memory session map
+└── products/eco-smart/modules/
+    ├── sites/
+    │   ├── sites.module.ts, sites.controller.ts, sites.service.ts
+    │   ├── dto/ (create-site, update-site, share-site)
+    │   └── entities/site.entity.ts
+    └── devices/
+        ├── devices.module.ts, devices.controller.ts, device.service.ts
+        ├── dto/ (register-device, handshake-request, secure-data-request)
+        ├── entities/ (device.entity.ts, device-registry.entity.ts)
+        └── guards/device-access.guard.ts
+```
 
----
-
-## 16. Device Validation Flow
-
-1. Upon initial communication boot, a hardware device MUST initiate a handshake using its assigned cryptographic credential values.
-2. The core security provider MUST validate the signature against active internal authorization records.
-3. The authentication handler MUST verify that the underlying software firmware match the approved parameters.
-4. If validation parameters match completely, the connection state MUST shift to `ONLINE`. If any criteria fail, the system MUST drop the socket link immediately and trigger a high-severity security alert.
-
----
-
-## 17. mYBUS-v2 Protocol Overview
-
-The system relies on an optimized application-layer binary configuration protocol known as `mYBUS-v2`. It handles data streaming across edge infrastructure topologies using fixed-length frame sequences.
-
-### 17.1. Frame Definition Matrix
-
-All telemetry data transfers, error messages, and control signals transmitted using the `mYBUS-v2` structure MUST strictly conform to the following byte frame allocation scheme:
-
-| Byte Segment Offset | Data Content Definition | Field Constraints & Technical Requirements |
-| --- | --- | --- |
-| `0x00` | **Frame Sync Character** | MUST be explicitly set to the static hex signature `0xAA`. |
-| `0x01` | **Protocol Variant Identification** | MUST evaluate to the static hex marker `0x20` (v2.0). |
-| `0x02` - `0x03` | **Target Device Hardware Address** | Big-endian 16-bit integer designating physical node ID. |
-| `0x04` | **Functional Instruction Type** | Single-byte identifier command routing code. |
-| `0x05` | **Data Payload Length Field** | Single-byte integer defining explicit payload buffer size. |
-| `0x06` - `0x15` | **System Data Payload Area** | Fixed 16-byte field containing real-time values. |
-| `0x16` - `0x17` | **Cyclic Redundancy Validation Code** | Mandatory 16-bit CRC checksum calculation parameter. |
-
----
-
-## 18. Security Principles
-
-* **Principle of Least Privilege:** Every internal system interface, worker queue, and software module actor MUST operate with the bare minimum permission footprint needed to execute its logic.
-* **Zero-Trust Networking Layer:** Internal network paths between backend nodes, API routers, and microservice components MUST authenticate each transaction packet explicitly.
-* **Comprehensive Data Scrubbing:** All input vectors originating outside a microservice trust zone MUST undergo string sanitation and explicit whitelist-based schema filtering before reaching processing tasks.
-
----
-
-## 19. Cryptography Rules
-
-* **Secret Hashing Parameters:** Passwords stored in database environments MUST use the Argon2id cryptographic derivation framework. Configuration factors MUST NOT fall below the following thresholds:
-* Memory footprint: $m = 65536 \text{ KiB}$
-* Time iterations: $t = 3$
-* Parallel channels: $p = 4$
-
-
-* **Data Masking Keys:** Stored variables requiring reverse reading processing capabilities MUST use AES-256-GCM symmetric encryption pipelines. Initialization Vector components (`IV`) MUST be non-repeating and cryptographically random for every execution run.
+There is no `src/modules/telemetry/`, no `src/modules/automation/`, and no `src/core/` directory. Any document or comment referencing them describes work that has not started.
 
 ---
 
-## 20. Transaction Rules
+## 5. Module Responsibilities (Current)
 
-* **Strict Operational Isolation:** Database mutations affecting fiscal metrics, user account properties, or structural physical system mappings MUST run under isolated TypeORM relational engine transaction states.
-* **Deterministic Timeout Boundaries:** Every long-lived database transaction lock instance MUST register an explicit cancellation limit of 5000 milliseconds. Transactions exceeding this limit MUST abort automatically, perform a rolling undo sequence, and log a high-priority exception trace.
+### 5.1 AuthModule (`platform/identity/auth`)
+Registration (with email + phone verification codes sent via MailHog), login, refresh, forgot/reset password (email and phone variants), email/phone verification. Issues JWTs via `@nestjs/jwt`. See §6 for exact token behavior — it differs from earlier design intent.
 
----
+### 5.2 UsersModule (`platform/identity/users`)
+Exposes `GET /users/me` only. Provides `UsersService`/`UsersRepository` for internal lookups (`findById`, `findByEmail`, `findByUsername`, site membership helpers). Does not perform authentication.
 
-## 21. Database Design Rules
+### 5.3 SitesModule (`products/eco-smart/modules/sites`)
+CRUD for sites, ownership and access checks (`SitesService.hasAccess`), used by `DeviceAccessGuard` to gate device endpoints.
 
-* **Enforcement of Foreign Key Consistency:** Relational continuity across distinct tables MUST be bound firmly via native engine foreign-key constraints. No logic-level "virtual" data links are permitted.
-* **Mandatory Query Performance Indexing:** Query filters matching unique ID tracking properties, composite conditional logic paths, or search target properties MUST utilize clear indexing structures.
-* **Normalization Conformity:** Tables MUST sustain Third Normal Form (3NF) layout structures. Intentional denormalization optimizations for speed improvements MUST require explicit analytical benchmarking results before adoption.
+### 5.4 DevicesModule (`products/eco-smart/modules/devices`)
+Device registration, listing, single-device lookup (guarded), and the three-phase mYBUS handshake/data endpoints.
 
----
+### 5.5 MyBusModule (`infrastructure/mybus`)
+`MyBusSecurityService`: ECDH (P-256) key exchange, HKDF-SHA256 session key derivation, HMAC device-challenge verification, AES-256-GCM payload decryption. Session state is held in an **in-memory `Map`** keyed by `deviceId` (see §8 — this violates the stateless-service rule and does not survive process restart or horizontal scaling).
 
-## 22. Error Handling
-
-* **Zero Raw Leakage:** Stack execution contexts, variable dumps, or storage-level infrastructure logs MUST NOT be exposed on outbound API endpoints.
-* **Universal Typification:** Exceptional states raised during routine operations MUST extend from a structural core error class definition (`AppException`). This guarantees predictable parsing across external system components.
-
----
-
-## 23. Logging Strategy
-
-* **JSON Formatting Requirement:** Production system environment logging engines MUST format runtime status indicators directly into single-line structured JSON data structures.
-* **Trace Context Continuation:** Incoming request threads crossing systemic microservice boundaries MUST transport an immutable correlation identifier token string (`X-Correlation-ID`) across all log outputs.
-* **Log Level Definition:**
-* `FATAL`: Systemic failure rendering the microservice completely non-operational. Immediate paging required.
-* `ERROR`: Local transactional failure or structural exception. Requires investigation.
-* `WARN`: Non-optimal execution paths or deprecated API requests.
-* `INFO`: High-level operational checkpoints (e.g., application startup, migration success).
-
-
+### 5.6 HealthModule (`application/health`)
+`GET /health` → `{ status: 'OK', timestamp }`. No dependency checks (DB, mail) are performed.
 
 ---
 
-## 24. Docker Architecture
+## 6. Authentication Flow (Current — Bearer Header, Not Cookies)
 
-* **Minimal Distro Blueprint:** System deployment instances MUST construct execution containers using verified minimal, low-vulnerability Base images (e.g., `node:18-alpine` or `python:3.11-alpine`).
-* **Multi-Stage Container Compilations:** Service builds MUST split processing steps via multi-stage files. Build tools, development setups, and source cache layers MUST be completely omitted from the final runtime image footprint.
-* **Non-Root Privilege Mode:** Container runtimes MUST explicitly declare dropping root context flags before startup. The entrypoint runtime MUST use an isolated unprivileged user profile.
+```
+Client                          AuthController              AuthService                 DB
+  │── POST /auth/register ─────────►│                          │                          │
+  │                                  │──────────────────────────►│── check username/email/phone ──►│
+  │                                  │                          │◄─ save user (bcryptjs hash) ────│
+  │                                  │                          │── send email+phone codes (MailHog)│
+  │◄── 201 { status: pending_verification } ───────────────────│                          │
+  │                                  │                          │                          │
+  │── POST /auth/verify-email, /auth/verify-phone (codes) ─────►│                          │
+  │                                  │                          │                          │
+  │── POST /auth/login (username, password) ───────────────────►│                          │
+  │                                  │                          │── bcrypt.compare ────────►│
+  │                                  │                          │── sign access + refresh JWT│
+  │◄── 200 { access_token, refresh_token } ─────────────────────│  (returned in JSON body)  │
+  │                                  │                          │                          │
+  │── subsequent requests: Authorization: Bearer <access_token> ─────────────────────────────►│
+  │                                  │                          │                          │
+  │── POST /auth/refresh (Authorization: Bearer <refresh_token>) ►│                          │
+  │                                  │                          │── bcrypt.compare vs stored hash│
+  │◄── 200 { access_token, refresh_token } (new pair) ──────────│                          │
+```
 
----
+Facts, stated plainly because prior documents got this backwards:
 
-## 25. Future Scalability
+1. **Tokens are transported via the `Authorization: Bearer <token>` header**, both for access tokens (`JwtAccessStrategy` uses `ExtractJwt.fromAuthHeaderAsBearerToken()`) and refresh tokens (`JwtRefreshStrategy`, same extractor). **No `HttpOnly` cookies are set or read anywhere in this codebase.**
+2. **`AuthService.login()` and `AuthService.refreshTokens()` return `{ access_token, refresh_token }` directly in the JSON response body.** This is the actual, current, intended behavior of this API — not a bug to silently fix by rewriting the docs to say otherwise.
+3. The refresh token itself is never stored in plaintext: `updateRefreshToken()` bcrypt-hashes it into `user.currentHashedRefreshToken` before saving, and `refreshTokens()` compares via `bcrypt.compare`.
+4. Password hashing uses **`bcryptjs`**, called directly in `AuthService` (`bcrypt.genSalt(10)`, `bcrypt.hash`, `bcrypt.compare`). The `argon2` package is present in `package.json` but is never imported or called anywhere in the codebase.
+5. Email/phone verification codes are 5-digit numeric codes, SHA-256 hashed before storage, with a 30-minute expiry window on registration and a 15-minute (email) / 5-minute (phone) window on password reset.
 
-* **State-Free Horizontal Growth:** Microservice applications MUST be fully stateless to support horizontal scaling. Session profiles, transient data metrics, and global state tracking parameters MUST reside exclusively inside shared cache engines like Redis.
-* **Database Read-Write Separation:** Storage configurations SHOULD support a split topology with one primary database cluster managing write operations alongside multiple synchronized, read-only replica instances.
-
----
-
-## 26. Testing Strategy
-
-* **Minimum Coverage Floors:** Continuous Integration workflows MUST reject pull-request builds if global unit test branch metric tracking falls under a strict 80% boundary line.
-* **Complete Mocking Isolation:** Unit test routines MUST NOT form live outbound connections to external storage engines or external API systems. All network, message queue, and database components MUST rely completely on mocked test doubles.
-
----
-
-## 27. CI/CD Rules
-
-* **Immutable Pipeline Progression:** Code compilation outputs from successful build phases MUST be packed into tagged Docker configurations. These exact compiled artifacts MUST progress through all staging tiers unmodified.
-* **Automated Validation Barriers:** Main application branch deployment actions MUST require complete success across automated lint check suites, unit testing matrices, and integration test runners.
-
----
-
-## 28. API Design Standards
-
-* **RESTful Blueprint Conformity:** Internal HTTP endpoints MUST enforce strict REST convention mechanics. Entity collections MUST rely on plural nouns (`/api/v1/devices`), and state operations MUST utilize proper HTTP verbs (`GET`, `POST`, `PUT`, `DELETE`).
-* **Mandatory API Version Routing:** API paths MUST embed explicit api-version parameters into the route base structure (`/api/v1/...`).
-
----
-
-## 29. Performance Guidelines
-* **Memory Profiling Constraints:** Core Node.js execution threads running inside backend tasks MUST maintain an idle heap footprint below 150 Megabytes.
-* **Caching Strategy:** High-frequency, slow-changing database queries (e.g., structural device lists or organization profiles) MUST be cached in Redis with a Time-To-Live (TTL) value not exceeding 300 seconds.
+### Known payload inconsistency
+`AuthService.generateTokens()` signs a JWT payload of `{ sub, username, role }`, and `AccountingInterceptor` reads `user.role` for its audit log. **The `User` entity has no `role` column** — it has `siteRole` instead. In current code, `user.role` is always `undefined`, so the JWT payload's `role` claim and the accounting log's `role` field are both always empty. This is a real, present inconsistency in the running system, not a documentation error — it is flagged here for awareness, not silently corrected.
 
 ---
 
-## 30. Things That Must NEVER Be Changed
-* **Binary Frame Synch Signatures:** The mYBUS-v2 protocol initialization signature (`0xAA`) and internal layout order MUST NOT be changed or reallocated.
-* **Token Delivery Mechanism:** Outbound user session access and refresh token objects MUST always rely on strict server-side cookie structures. They MUST NOT be moved to plain authorization payload texts or custom application headers.
-* **Primary Database Technology Selection:** PostgreSQL is the only approved primary persistent data store. It MUST NOT be replaced with NoSQL engines or alternative relational database runtimes.
-* **Entity Identification Formats:** System primary key indices MUST utilize structural UUIDv4 values. Under no circumstances should integer-based auto-increment structures replace them.
+## 7. Authorization Model (Current)
 
+* **`SiteRole`** (`common/enums/site-role.enum.ts`) is the only role enum actually used anywhere: `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`. It lives on `User.siteRole` and is checked by `RolesGuard` against `@Roles(...)` metadata.
+* **`UserRole`** (`common/roles.enum.ts`: `ADMIN`, `OPERATOR`, `USER`) exists as a file but is **not referenced by any guard, controller, or entity** in the current codebase. It should be treated as dead code (see §8, recommended for removal).
+* `JwtAuthGuard` + `RolesGuard` protect `GET /users/me`.
+* `AuthGuard('jwt')` (via `@nestjs/passport`, same underlying `jwt` strategy) protects all `/sites/*` routes.
+* `DeviceAccessGuard` protects `GET /devices/:deviceId` and `POST /devices/data`: it loads the device's `Site`, then calls `SitesService.hasAccess(userId, site.id)`, which returns true if the user owns the site or is its current `siteId` member. `POST /devices/register` and `POST /devices/handshake` are **not** guarded — they are open endpoints today (devices authenticate via the mYBUS handshake itself, not a JWT).
+
+---
+
+## 8. Known Deviations From Stated Engineering Rules
+
+These are present in the codebase today and are documented here for accuracy, not silently resolved:
+
+* **Statelessness violation:** `MyBusSecurityService` holds `activeSessions: Map<string, {...}>` as instance state on a singleton provider. This contradicts the "services must remain stateless" rule elsewhere in project governance. It also means device sessions are lost on any restart and cannot be shared across horizontally-scaled instances.
+* **Test bypasses in security-critical code:** `verifyDeviceChallenge()` accepts the literal string `'test_hmac'` as a valid HMAC, and `decryptMyBusData()` returns plaintext unmodified if the payload equals `'test_encrypted_payload'` or contains the substring `'action'`. These bypasses are live in the current codebase and should be removed or gated behind a non-production flag before any production deployment.
+* **Insecure CORS + credentials combination:** `main.ts` sets `origin: '*'` together with `credentials: true`. Since tokens are Bearer-header based (not cookies) this doesn't leak session cookies, but the combination is nonstandard and worth a deliberate second look.
+* **`synchronize: true` in TypeORM config:** auto-syncs schema from entities on every boot. Fine for local dev, unsafe for any shared/staging/production environment (can silently alter or drop columns).
+* **Duplicate constant files:** `common/constants/auth.constants.ts`, `common/auth.constants.ts`, and `common/export` all define an identical `AUTH_CONSTANTS` object. Only one should exist.
+* **Unused legacy enum:** `common/roles.enum.ts` (`UserRole`) has no callers.
+
+---
+
+## 9. Coding Standards (Current Practice, Not Aspirational)
+
+The following are actually followed in the reviewed code and should continue to be:
+* Kebab-case filenames (`device-access.guard.ts`, `jwt-access.strategy.ts`).
+* PascalCase classes, camelCase members.
+* UUIDv4 primary keys on every entity (`@PrimaryGeneratedColumn('uuid')`).
+* DTOs with `class-validator` decorators for all controller input.
+
+The following are stated as rules elsewhere but are **not** consistently followed and should not be assumed true when reading the code:
+* "No raw exception leakage" — several catch blocks (`DevicesController.handleSecureData`) rethrow `error.message` directly from internal exceptions into a `BadRequestException`, which can leak internal detail to the client.
+* "Services must be stateless" — violated by `MyBusSecurityService` (§8).

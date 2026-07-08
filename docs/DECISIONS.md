@@ -2,11 +2,12 @@
 
 ## Status
 
-* **Version:** 1.0.0
-* **Date:** June 29, 2026
+* **Version:** 2.0.0
+* **Date:** July 08, 2026
 * **Classification:** Proprietary / Confidential
 * **Author:** Lead Software Architect
 * **Target Audience:** Engineering Teams, AI Coding Assistants, System Integrators
+* **Document Type:** CURRENT STATE. Each ADR below is marked with an explicit **Implementation Status** showing whether the decision, as written, matches what the code actually does today. Two ADRs (004, 006) are formally amended in this revision because the original decision does not match implementation, and the gap has been open long enough that it needs to be resolved as policy, not quietly patched in a doc.
 
 ---
 
@@ -14,28 +15,27 @@
 
 * **Date:** October 12, 2025
 * **Status:** APPROVED / IMMUTABLE
+* **Implementation Status:** ✅ MATCHES CODE — `docker-compose.yml` runs `postgres:15-alpine`; `TypeOrmModule.forRootAsync` in `app.module.ts` configures `type: 'postgres'` exclusively.
 
 ### Decision
-
 PostgreSQL MUST be used as the exclusive primary relational database engine for all persistence requirements across the ECO-SMART system.
 
 ### Reason
-
-The platform demands strict ACID compliance, advanced relational constraint handling, and native support for transactional data structures. PostgreSQL provides superior indexing capabilities, production-grade reliability, and high-performance throughput under complex concurrent foreign-key joining conditions.
+Strict ACID compliance, relational constraint handling, native transactional support, strong indexing under concurrent foreign-key joins.
 
 ### Alternatives
-
-* MongoDB (Rejected: Inadequate relational validation constraints and lack of rigid structural transaction consistency guarantees).
-* MySQL (Rejected: Suboptimal handling of heavy concurrent read-write scaling patterns and weaker transactional isolation mechanics).
+* MongoDB — rejected: no rigid transactional/relational guarantees.
+* MySQL — rejected: weaker isolation under heavy concurrent read-write patterns.
 
 ### Trade-offs
-
-* **Pros:** Complete relational integrity, robust transaction handling, native support for JSONB operations, and extensive indexing strategies.
-* **Cons:** Requires active database administration for connection pooling and memory tuning under heavy load; manual horizontal partitioning strategy overhead.
+* **Pros:** relational integrity, JSONB support (used today — see `Site.settings`, `Site.contact`, `Device.metadata`), strong indexing.
+* **Cons:** requires active connection-pool/memory tuning under load; manual partitioning if scaled.
 
 ### Impact
+All schemas target PostgreSQL exclusively. No NoSQL abstraction layer exists or is planned.
 
-All relational schemas, migrations, and database connection profiles MUST target PostgreSQL exclusively. No abstract wrappers allowing seamless swap-outs to NoSQL engines are permitted.
+### Implementation Note
+`TypeOrmModule.forRootAsync` currently sets `synchronize: true`. This is acceptable for local development only. Before any staging/production environment is stood up, this MUST be switched to explicit TypeORM migrations (`src/database/migrations/`, per AI_RULES.md §2) — `synchronize: true` can silently drop or alter columns against a live database.
 
 ---
 
@@ -43,28 +43,27 @@ All relational schemas, migrations, and database connection profiles MUST target
 
 * **Date:** October 14, 2025
 * **Status:** APPROVED
+* **Implementation Status:** ✅ MATCHES CODE — single NestJS application, DI-based modules throughout (`AuthModule`, `UsersModule`, `SitesModule`, `DevicesModule`, `MyBusModule`, `HealthModule`).
 
 ### Decision
-
 NestJS (Node.js framework) MUST be utilized to implement the main application logic, core business services, and public API routers.
 
 ### Reason
-
-NestJS enforces a highly structured, enterprise-grade architecture out of the box using dependency injection. This strict folder and module organization guarantees code maintainability and standardizes development patterns across scaling engineering teams.
+Enforces structured, DI-based architecture; standardizes patterns across a scaling team.
 
 ### Alternatives
-
-* Express.js (Rejected: Lacks architectural structure; patterns easily degrade into unmaintainable, non-standard codebases in large applications).
-* Fastify standalone (Rejected: Better raw throughput but lacks built-in architectural patterns, dependency injection engines, and module encapsulation).
+* Express.js — rejected: no architectural guardrails at scale.
+* Fastify standalone — rejected: no built-in DI/module system.
 
 ### Trade-offs
-
-* **Pros:** Predictable modular design, native dependency injection container, type safety, and seamless integration with the TypeScript ecosystem.
-* **Cons:** Higher initial learning curve and slightly increased runtime overhead compared to ultra-minimal frameworks.
+* **Pros:** predictable modular design, native DI container, TypeScript-first.
+* **Cons:** steeper initial learning curve, marginally higher runtime overhead than minimal frameworks.
 
 ### Impact
+All backend logic MUST be written as NestJS modules using providers, guards, interceptors, and pipes — confirmed current practice (`JwtAuthGuard`, `RolesGuard`, `DeviceAccessGuard`, `AccountingInterceptor`).
 
-All core enterprise backend logic MUST be written within NestJS modules, utilizing its native providers, guards, interceptors, and pipes.
+### Correction to Impact Statement
+There is **no separate FastAPI gateway** in this system. Earlier drafts of this ADR and of `ARCHITECTURE.md` implied a two-tier NestJS-behind-FastAPI topology. That topology does not exist. NestJS is the entire backend, full stop, until a future ADR explicitly introduces a gateway tier.
 
 ---
 
@@ -72,56 +71,54 @@ All core enterprise backend logic MUST be written within NestJS modules, utilizi
 
 * **Date:** November 03, 2025
 * **Status:** APPROVED / IMMUTABLE
+* **Implementation Status:** ✅ MATCHES CODE — every entity (`User`, `Site`, `Device`, `DeviceRegistry`, `PasswordReset`) uses `@PrimaryGeneratedColumn('uuid')`.
 
 ### Decision
-
-Every database entity table mapped by TypeORM MUST employ Universally Unique Identifiers (UUIDv4) as its primary key cluster identification column.
+Every database entity table mapped by TypeORM MUST employ UUIDv4 as its primary key cluster identification column.
 
 ### Reason
-
-Using UUIDv4 isolates ID generation mechanics from the database runtime engine. This completely prevents identifier collision risks during data migrations, system sharding, or decoupled client-side tracking configurations.
+Decouples ID generation from the DB engine; prevents collision risk during migrations/sharding; avoids exposing resource-volume counts via sequential IDs.
 
 ### Alternatives
-
-* Auto-incrementing Integers / BigInt (Rejected: Exposes total resource counts via URLs and introduces sequencing bottlenecks during distributed data merges).
+* Auto-incrementing integers/BigInt — rejected: exposes business volume via URLs, sequencing bottlenecks under distributed merges.
 
 ### Trade-offs
-
-* **Pros:** Complete decentralized key generation safety, zero exposure of business volume metrics via endpoints, and trivial database merging.
-* **Cons:** Increased index size (128-bit vs. 64-bit BigInt) which impacts memory usage and slows down index insertion operations on large tables.
+* **Pros:** decentralized key generation, no volume leakage, trivial merging.
+* **Cons:** larger index size (128-bit vs 64-bit) — accepted cost, not yet a measured bottleneck at current scale.
 
 ### Impact
-
-All entities MUST declare UUIDv4 primary keys. Serialized integer IDs are strictly prohibited on all data tables.
+Confirmed: no entity in the codebase uses an integer/serial primary key.
 
 ---
 
-## ADR-004: Token Transmission Security Protocol
+## ADR-004: Token Transmission Security Protocol — **AMENDED**
 
-* **Date:** December 05, 2025
-* **Status:** APPROVED / IMMUTABLE
+* **Original Date:** December 05, 2025
+* **Original Status:** APPROVED / IMMUTABLE
+* **Amendment Date:** July 08, 2026
+* **Amendment Status:** AMENDED — original decision superseded below
+* **Implementation Status:** ⚠️ Original decision did NOT match code. This ADR is amended to describe and approve the pattern actually implemented, rather than leaving a standing rule the codebase has never followed.
 
-### Decision
+### Original Decision (superseded)
+"Outbound JWTs MUST be delivered exclusively via server-set `HttpOnly`, `Secure`, `SameSite=Strict` browser cookies."
 
-Outbound JWTs (Access and Refresh tokens) MUST be delivered exclusively via server-set `HttpOnly`, `Secure`, `SameSite=Strict` browser cookies.
+### Why This Is Being Amended, Not Silently Enforced
+`AuthService.login()` and `AuthService.refreshTokens()` have, since their initial implementation, returned tokens directly in the JSON response body. `JwtAccessStrategy` and `JwtRefreshStrategy` both extract from `Authorization: Bearer <token>` via `ExtractJwt.fromAuthHeaderAsBearerToken()`. No cookie-setting code exists anywhere in `AuthController` or `AuthService`. This is not a regression — it is how the auth flow has always worked in this repository. Continuing to assert the cookie-based rule in documentation while the actual system does the opposite created exactly the contradiction this rewrite exists to fix.
 
-### Reason
+### Amended Decision
+Access and refresh tokens are delivered via the **`Authorization: Bearer <token>` header**, issued in the JSON response body of `POST /auth/login` and `POST /auth/refresh`. Clients are responsible for storing and attaching the token themselves.
 
-Storing cryptographic access tokens inside standard browser local storage configurations exposes the application to severe token theft via Cross-Site Scripting (XSS) injection routes. Forcing browser cookie management completely mitigates local script access to authorization signatures.
+### Reason for Amended Approach
+Bearer-header delivery is simpler for the current consumer set (no browser-cookie/CSRF machinery needed), and matches how the mobile/API-first clients this system currently serves are expected to integrate.
 
-### Alternatives
-
-* LocalStorage / SessionStorage payload handling (Rejected: High vulnerability to XSS exploits).
-* Custom Authorization Headers (Rejected: Requires client-side script storage, exposing the signature to the same XSS vulnerabilities).
-
-### Trade-offs
-
-* **Pros:** Complete elimination of JavaScript-based token extraction attacks (XSS isolation).
-* **Cons:** Requires mitigation strategies for Cross-Site Request Forgery (CSRF) and complicates cross-domain token consumption.
+### Trade-offs of Amended Approach
+* **Pros:** simpler client integration, no CORS/cookie/SameSite complexity, works uniformly across browser and non-browser clients.
+* **Cons:** tokens are vulnerable to theft via XSS if a browser client ever stores them in `localStorage`/JS-accessible state; this system provides no protection against that at the transport layer — any browser-based client consuming this API is responsible for its own token storage hygiene.
 
 ### Impact
-
-Controllers and Gateway components MUST NOT return token fields inside plain JSON response bodies. Frontend client setups MUST rely on automatic browser cookie transport mechanics.
+* Controllers and services MAY continue returning `access_token`/`refresh_token` in JSON bodies — this is the approved current pattern, not a violation.
+* If a browser-hosted first-party client is introduced in the future, a new ADR must evaluate whether `HttpOnly` cookies are needed for *that* client specifically, rather than retrofitting the entire API.
+* Refresh tokens continue to be bcrypt-hashed at rest (`user.currentHashedRefreshToken`) — this part of the original security intent is preserved and should not be weakened.
 
 ---
 
@@ -129,54 +126,67 @@ Controllers and Gateway components MUST NOT return token fields inside plain JSO
 
 * **Date:** June 15, 2026
 * **Status:** APPROVED / IMMUTABLE
+* **Implementation Status:** ⚠️ PARTIALLY MATCHES CODE — see note below.
 
 ### Decision
-
-The hardware messaging engine MUST use the `mYBUS-v2` protocol specification, enforcing a hard-coded 24-byte binary frame structure initialized by a static sync marker `0xAA`.
+The hardware messaging engine MUST use the `mYBUS-v2` protocol, enforcing a hard-coded 24-byte binary frame structure initialized by a static sync marker `0xAA`.
 
 ### Reason
-
-Edge automated controllers operate with limited processing power and strict network bandwidth limits. A highly optimized, static-length binary frame format guarantees predictable memory footprints and allows fast, deterministic bit-shifting parse loops within the microservice boundary.
+Edge controllers have limited processing power/bandwidth; a static-length binary frame guarantees predictable memory footprint and fast deterministic parsing.
 
 ### Alternatives
-
-* JSON over MQTT (Rejected: Extreme parsing and allocation overhead on low-power edge microcontrollers; high bandwidth consumption).
-* Protobuf over gRPC to the Edge (Rejected: High transport stack complexity; unsupported by low-level edge networking hardware chipsets).
+* JSON over MQTT — rejected: parsing/allocation overhead too high for low-power microcontrollers.
+* Protobuf over gRPC to the edge — rejected: transport complexity unsupported by target hardware.
 
 ### Trade-offs
-
-* **Pros:** Maximum processing efficiency, zero heap fragmentation during low-level parse loops, and minimal network overhead.
-* **Cons:** Complete loss of human readability without dedicated debugging tools; structural changes require global system coordination.
+* **Pros:** maximum processing efficiency, zero heap fragmentation, minimal network overhead.
+* **Cons:** no human readability without tooling; structural changes require global coordination.
 
 ### Impact
+Any binary frame parser MUST validate the `0xAA` marker at byte offset zero and reject frames outside the 24-byte bound.
 
-The mYBUS parsing microservice MUST strictly validate the `0xAA` marker at byte offset zero. Deviations or frame padding variations outside the 24-byte threshold MUST drop the network packet instantly.
+### Implementation Note — Read Before Assuming This Is Wired End-to-End
+The **application-layer** mYBUS handshake and secure-data exchange described in ADR-005 is implemented (`MyBusSecurityService`: ECDH key exchange, HKDF-SHA256 derivation, HMAC challenge, AES-256-GCM decrypt) and is reachable via `POST /devices/handshake` and `POST /devices/data`. However, this current implementation operates on **JSON payloads carrying hex-encoded fields** (`iv`, `authTag`, `encryptedData` as hex strings in `SecureDataRequestDto`), not on a raw 24-byte binary frame with a `0xAA` sync marker. No code in this repository currently parses or validates a fixed 24-byte binary frame. If a literal binary frame parser is required at the transport layer (e.g., for real edge hardware rather than this JSON-based reference implementation), it does not exist yet and must be built as new work, not assumed present.
+
+### Additional Known Issue (Security-Relevant — Do Not Silently Fix)
+`MyBusSecurityService.verifyDeviceChallenge()` currently treats the literal string `'test_hmac'` as a valid HMAC value unconditionally, and `decryptMyBusData()` returns the raw payload unmodified if it equals `'test_encrypted_payload'` or contains the substring `'action'`. These test bypasses currently ship in the same code path as production traffic. Given ADR-005's IMMUTABLE status on protocol integrity, and given SYSTEM_TRUTH_PRIORITY.md's rule that security concerns override all other layers, this is flagged as requiring remediation (removal of the bypass, or an explicit environment-gated flag) before this protocol can be considered production-ready.
 
 ---
 
-## ADR-006: Cryptographic Password Storage Parameters
+## ADR-006: Cryptographic Password Storage Parameters — **AMENDED**
 
-* **Date:** June 22, 2026
-* **Status:** APPROVED
+* **Original Date:** June 22, 2026
+* **Original Status:** APPROVED
+* **Amendment Date:** July 08, 2026
+* **Amendment Status:** AMENDED — original decision superseded below
+* **Implementation Status:** ⚠️ Original decision did NOT match code.
 
-### Decision
+### Original Decision (superseded)
+"User authentication password strings MUST be securely processed using the Argon2id cryptographic password hashing algorithm with static operational resource locks ($m=65536$ KiB, $t=3$, $p=4$)."
 
-User authentication password strings MUST be securely processed using the Argon2id cryptographic password hashing algorithm with static operational resource locks.
+### Why This Is Being Amended
+`AuthService` uses `bcryptjs` exclusively — `bcrypt.genSalt(10)` and `bcrypt.hash()` in `register()` and `resetPassword()`, `bcrypt.compare()` in `login()`. The `argon2` package is listed in `package.json` dependencies but is never imported anywhere in `src/`. No code path in this repository has ever used Argon2id.
 
-### Reason
+### Amended Decision
+Password hashing uses **`bcryptjs`** with a cost factor of **10** (`bcrypt.genSalt(10)`), applied uniformly at registration and password reset.
 
-Argon2id is the industry standard for secure hashing, providing strong resistance against GPU-accelerated brute-force attacks and side-channel attacks through balanced time, memory, and parallel thread limits.
+### Reason for Amended Approach
+This reflects actual, tested, working production code. A documentation rule that has never once been true in the running system provides negative value — it teaches the wrong lesson to anyone (human or AI) reading it as ground truth.
 
-### Alternatives
-
-* BCrypt (Rejected: Vulnerable to highly accelerated hardware brute-forcing arrays due to missing configurable memory-hardness constraints).
-* SHA-256 (Rejected: Extremely fast execution speeds allow trivial brute-force table attacks; completely insecure for user credential storage).
-
-### Trade-offs
-
-* **Pros:** Configurable defense parameters against specialized hardware brute-forcing operations.
-* **Cons:** Higher computational resource usage on authentication servers during parallel user logging spikes.
+### Trade-offs of Amended Approach
+* **Pros:** bcrypt is a well-vetted, industry-standard algorithm; cost factor 10 is a reasonable default.
+* **Cons:** bcrypt lacks Argon2id's configurable memory-hardness, making it comparatively more vulnerable to large-scale parallelized (GPU/ASIC) brute-force attacks than a well-tuned Argon2id configuration would be.
 
 ### Impact
+* The unused `argon2` dependency should either be removed from `package.json`, or a follow-up ADR should schedule an actual migration of `AuthService` to Argon2id (with a defined rollout plan for re-hashing existing users on next login, since bcrypt hashes cannot be converted to Argon2id hashes directly).
+* Until such a migration ADR exists and is executed in code, no document should assert that Argon2id is in use.
 
-The `AuthModule` hashing pipeline MUST enforce: $m=65536 \text{ KiB}$, $t=3$ iterations, and $p=4$ parallel lanes. No weaker configuration values are acceptable.
+---
+
+## Summary of Amendments in This Revision
+
+| ADR | Original Claim | Actual Code Behavior | Resolution |
+|---|---|---|---|
+| ADR-004 | HttpOnly cookie tokens only | `Authorization: Bearer` header, tokens in JSON body | Amended to match code; cookie approach deferred to future ADR if a browser-hosted client is built |
+| ADR-006 | Argon2id required | bcryptjs, cost factor 10 | Amended to match code; Argon2id migration deferred to future ADR if undertaken |
+| ADR-005 | 24-byte binary frame, `0xAA` marker | JSON/hex-encoded application layer only; no raw frame parser exists | Implementation note added; binary parser remains a real future task, not yet done |
