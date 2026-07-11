@@ -1,6 +1,9 @@
+#Environment variables
 .env
 .env.*
 !.env.example
+
+# Security and secrets
 *.key
 *.pem
 *.crt
@@ -13,12 +16,14 @@
 secrets/
 credentials/
 
+# Dependencies and builds
 node_modules/
 dist/
 build/
 coverage/
 .nyc_output/
 
+# Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -29,11 +34,14 @@ lerna-debug.log*
 *.seed
 *.pid.lock
 
+# Databases
 *.db
 *.sqlite
 *.sqlite3
 *.sqlite-journal
+db/
 
+# OS and editor files
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -41,19 +49,19 @@ Desktop.ini
 *.swo
 *~
 
+# IDE and project files
 .vscode/
 .idea/
 *.iml
 *.iws
 *.ipr
-.vscode/
 .settings/
 .classpath
 .project
 .factorypath
 *.code-workspace
 
-.DS_Store
+# Mac OS specific
 .AppleDouble
 .LSOverride
 Icon
@@ -61,8 +69,8 @@ Icon
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db
 
+# Temporary files
 *.tmp
 *.temp
 *.bak
@@ -70,10 +78,27 @@ Thumbs.db
 *~
 *.md.bak
 
+# Cache and build artifacts
 .eslintcache
 .prettiercache
 *.tsbuildinfo
 
+# Docker and environment specific
 docker-compose.override.yml
 *.env.docker
-db/
+
+# Project specific files
+query.js
+schema.json
+
+# Tools & Temporary structures
+tree.exe
+tree.zip
+tree-structure.txt
+project-structure.txt
+
+# Architecture Docs (Parent directory)
+../CURRENT_ARCHITECTURE_ASSESSMENT.md
+../MIGRATION_CHECKLIST.md
+../MODULE_INVENTORY.md
+../project-tree.txt
