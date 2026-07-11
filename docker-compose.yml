@@ -19,13 +19,34 @@ services:
     restart: always
     command: sh -c "until nc -z ecosmart_postgres 5432; do echo 'Waiting for Postgres...'; sleep 2; done; npm run start:prod"
     ports:
-      - "3000:3000"
+      - "3000:3000"   
+      - "3001:3001"   
     env_file:
       - ./backend-api/.env
+<<<<<<< Updated upstream
+=======
+    environment:
+      - SMTP_HOST=ecosmart_mailhog
+      - SMTP_PORT=1025
+      - WS_PORT=3001   
+>>>>>>> Stashed changes
     networks:
       - ecosmart_network
     depends_on:
       - postgres_db
+<<<<<<< Updated upstream
+=======
+      - ecosmart_mailhog
+
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: ecosmart_redis
+  #   restart: always
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - ecosmart_network
+>>>>>>> Stashed changes
 
 networks:
   ecosmart_network:
