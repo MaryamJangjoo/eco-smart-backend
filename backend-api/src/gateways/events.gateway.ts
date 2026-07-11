@@ -6,8 +6,8 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { JwtService } from '@nestjs/jwt';  
-import { ConfigService } from '@nestjs/config'; 
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @WebSocketGateway(3000, {
   cors: { origin: '*' },
@@ -28,6 +28,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       if (!token) {
         console.log('❌ No token provided, disconnecting...');
+        client.emit('auth_error', { message: 'Token required' });
         client.disconnect();
         return;
       }
@@ -40,7 +41,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.username = payload.username;
       client.data.role = payload.role;
 
-      console.log(`🔌 Authenticated client: ${payload.username} (${payload.sub})`);
+      console.log(`🔌 Authenticated user: ${payload.username} (${payload.sub})`);
       client.emit('connection_ack', { 
         status: 'authenticated', 
         user: payload.username 
@@ -48,7 +49,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     } catch (error) {
       console.log('❌ Invalid token, disconnecting...');
-      client.emit('auth_error', { message: 'Invalid token' });
+      client.emit('auth_error', { message: 'Invalid or expired token' });
       client.disconnect();
     }
   }
