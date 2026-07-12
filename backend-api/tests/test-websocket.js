@@ -1,23 +1,34 @@
 const io = require('socket.io-client');
 
-const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhN2YxYWRmYi1iZjQ5LTRkY2QtOTZjZi1kY2RiNDM0Y2JlMWMiLCJ1c2VybmFtZSI6IndlYnNvY2tldF90ZXN0IiwiaWF0IjoxNzgzNzcxMTY4LCJleHAiOjE3ODM3NzIwNjh9.T2cbxkNMVvqte96CQeCeyIC_3vdzfkluu1h3z3H6PNA';
+const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NDcxMDNiNi1mMTA5LTQ5NjEtYTlkMy0wMjM1NmE1NjcxYWMiLCJ1c2VybmFtZSI6IndlYnNvY2tldF90ZXN0MiIsImlhdCI6MTc4MzgzODM3NiwiZXhwIjoxNzgzODM5Mjc2fQ.86Pr1OE-ethhbSJzWgaNl-Zp7KGexwJBvZKnmzhC-V0';
+
+console.log('🔌 Connecting to WebSocket...');
+console.log('📝 Using token:', token.substring(0, 20) + '...');
 
 const socket = io('http://localhost:3000', {
   auth: { token },
   query: { deviceId: 'ESP32_WS_001' },
+  transports: ['websocket', 'polling'],
+  reconnection: true,      
+  reconnectionAttempts: 10, 
+  reconnectionDelay: 1000,  
+  timeout: 10000,
 });
 
 socket.on('connect', () => {
   console.log('✅ Connected!');
   
-  socket.emit('device_data', {
-    deviceId: 'ESP32_WS_001',
-    data: {
-      temperature: 25.5,
-      humidity: 60,
-      timestamp: new Date()
-    }
-  });
+  setInterval(() => {
+    socket.emit('device_data', {
+      deviceId: 'ESP32_WS_001',
+      data: {
+        temperature: 20 + Math.random() * 10,
+        humidity: 40 + Math.random() * 30,
+        timestamp: new Date()
+      }
+    });
+    console.log('📤 Telemetry sent');
+  }, 5000);
 });
 
 socket.on('connection_ack', (data) => {
@@ -25,15 +36,33 @@ socket.on('connection_ack', (data) => {
 });
 
 socket.on('live_monitoring', (data) => {
-  console.log('📊 Live data received:', data);
+  console.log('📊 Live data:', data);
 });
 
 socket.on('auth_error', (data) => {
   console.log('❌ Auth error:', data);
 });
 
+socket.on('connect_error', (err) => {
+  console.log('❌ Connection error:', err.message);
+});
+
+socket.on('disconnect', (reason) => {
+  console.log('❌ Disconnected:', reason);
+});
+
+socket.on('reconnect', () => {
+  console.log('🔄 Reconnected!');
+});
+
+socket.on('error', (err) => {
+  console.log('❌ Socket error:', err);
+});
+
+console.log('⏳ Waiting for data... (Press Ctrl+C to stop)');
+
 setTimeout(() => {
-  console.log('⏱️ Closing...');
+  console.log('⏱️ Closing connection...');
   socket.disconnect();
   process.exit(0);
-}, 5000);
+}, 60000);
