@@ -4,8 +4,7 @@ import { Repository } from 'typeorm';
 import { Site } from './entities/site.entity';
 import { User } from '../../../../platform/identity/users/entities/user.entity';
 import { SiteRole } from '../../../../common/enums/site-role.enum';
-import { RedisCacheService } from '../../../../cache/redis-cache.service';
-
+import { RedisCacheService } from '../../../../infrastructure/redis/redis-cache.service';
 @Injectable()
 export class SitesService {
   constructor(

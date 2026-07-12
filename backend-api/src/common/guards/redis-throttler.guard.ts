@@ -1,7 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ThrottlerException } from '@nestjs/throttler';
-import { RedisCacheService } from '../../cache/redis-cache.service';
+import { RedisCacheService } from '../../infrastructure/redis/redis-cache.service';
 
 @Injectable()
 export class RedisThrottlerGuard implements CanActivate {
