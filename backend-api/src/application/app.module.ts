@@ -12,8 +12,10 @@ import { HealthModule } from './health/health.module';
 import { DevicesModule } from '../products/eco-smart/modules/devices/devices.module';
 import { SitesModule } from '../products/eco-smart/modules/sites/sites.module';
 import { GatewaysModule } from '../gateways/gateways.module';
-import { RedisModule } from '../cache/redis.module';
-import { RedisThrottlerGuard } from '../common/guards/redis-throttler.guard';  // ✅ اضافه شد
+import { RedisModule } from '../infrastructure/redis/redis.module';
+import { RedisThrottlerGuard } from '../common/guards/redis-throttler.guard';
+import { JwtBlacklistService } from '../infrastructure/redis/jwt-blacklist.service';
+import { JwtBlacklistGuard } from '../infrastructure/redis/jwt-blacklist.guard';
 
 @Module({
   imports: [
@@ -21,7 +23,6 @@ import { RedisThrottlerGuard } from '../common/guards/redis-throttler.guard';  /
       isGlobal: true,
     }),
 
-    // ✅ Rate Limiting با Redis
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -76,6 +77,13 @@ import { RedisThrottlerGuard } from '../common/guards/redis-throttler.guard';  /
     GatewaysModule,
   ],
   providers: [
+    JwtBlacklistService,
+
+    {
+      provide: APP_GUARD,
+      useClass: JwtBlacklistGuard,
+    },
+
     {
       provide: APP_GUARD,
       useClass: RedisThrottlerGuard,
