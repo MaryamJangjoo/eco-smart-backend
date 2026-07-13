@@ -37,9 +37,10 @@ export class MyBusSecurityService {
 
       return { serverPublicKeyPem };
 
-    } catch (error: any) {
+    } catch (error: unknown) {  
       console.error('mYBUS Key Exchange Error:', error);
-      throw new BadRequestException(`Failed to process device public key: ${error.message}`);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new BadRequestException(`Failed to process device public key: ${message}`);
     }
   }
 
@@ -54,11 +55,20 @@ export class MyBusSecurityService {
       .update(nonce)
       .digest('hex');
 
-    if (receivedHmac === expectedHmac || receivedHmac === 'test_hmac') {
-      session.isAuthenticated = true; 
-      return true;
+    try {
+      const isValid = crypto.timingSafeEqual(
+        Buffer.from(receivedHmac, 'hex'),
+        Buffer.from(expectedHmac, 'hex')
+      );
+
+      if (isValid) {
+        session.isAuthenticated = true;
+        return true;
+      }
+      return false;
+    } catch (error: unknown) {
+      return false;
     }
-    return false;
   }
 
   decryptMyBusData(deviceId: string, encryptedBuffer: Buffer, iv: Buffer, authTag: Buffer): string {
@@ -67,10 +77,12 @@ export class MyBusSecurityService {
       throw new BadRequestException('Device not authenticated.');
     }
 
-    const plainTextStr = encryptedBuffer.toString('utf8');
+    if (iv.length !== 12) {
+      throw new BadRequestException('Invalid IV length. Expected 12 bytes.');
+    }
 
-    if (plainTextStr === 'test_encrypted_payload' || plainTextStr.includes('action')) {
-      return plainTextStr;
+    if (authTag.length !== 16) {
+      throw new BadRequestException('Invalid auth tag length. Expected 16 bytes.');
     }
 
     try {
@@ -82,10 +94,60 @@ export class MyBusSecurityService {
         decipher.final(),
       ]);
 
-      return decrypted.toString('utf8');
-    } catch (err) {
-      return JSON.stringify({ action: 'READ', registryAddress: 104, length: 1 });
+      const plainText = decrypted.toString('utf8');
+
+      try {
+        JSON.parse(plainText);
+      } catch {
+        throw new BadRequestException('Decrypted payload is not valid JSON.');
+      }
+
+      return plainText;
+
+    } catch (error: unknown) {  
+      console.error('Decryption error:', error);
+      const message = error instanceof Error ? error.message : 'Decryption failed';
+      throw new BadRequestException(`Failed to decrypt data: ${message}`);
     }
+  }
+
+  encryptMyBusData(deviceId: string, plainText: string): { encryptedData: string; iv: string; authTag: string } {
+    const session = this.activeSessions.get(deviceId);
+    if (!session || !session.isAuthenticated) {
+      throw new BadRequestException('Device not authenticated.');
+    }
+
+    try {
+      const iv = crypto.randomBytes(12);
+      const cipher = crypto.createCipheriv('aes-256-gcm', session.sessionKey, iv);
+
+      const encrypted = Buffer.concat([
+        cipher.update(plainText, 'utf8'),
+        cipher.final(),
+      ]);
+
+      const authTag = cipher.getAuthTag();
+
+      return {
+        encryptedData: encrypted.toString('hex'),
+        iv: iv.toString('hex'),
+        authTag: authTag.toString('hex'),
+      };
+
+    } catch (error: unknown) {  
+      console.error('Encryption error:', error);
+      const message = error instanceof Error ? error.message : 'Encryption failed';
+      throw new BadRequestException(`Failed to encrypt data: ${message}`);
+    }
+  }
+
+  clearSession(deviceId: string): void {
+    this.activeSessions.delete(deviceId);
+  }
+
+  isAuthenticated(deviceId: string): boolean {
+    const session = this.activeSessions.get(deviceId);
+    return !!session?.isAuthenticated;
   }
 
   private hkdfExtractAndExpand(secret: Buffer, salt: string, info: string): Buffer {
