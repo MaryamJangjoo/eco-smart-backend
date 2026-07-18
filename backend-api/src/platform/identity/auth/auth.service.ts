@@ -51,10 +51,10 @@ export class AuthService {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(pass, salt);
 
-    const emailCode = Math.floor(10000 + Math.random() * 90000).toString();
+    const emailCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedEmailCode = crypto.createHash('sha256').update(emailCode).digest('hex');
     
-    const phoneOtp = Math.floor(10000 + Math.random() * 90000).toString();
+    const phoneOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedPhoneOtp = crypto.createHash('sha256').update(phoneOtp).digest('hex');
     
     const expiresAt = new Date();
@@ -80,27 +80,49 @@ export class AuthService {
 
     await this.usersRepository.save(user);
 
+    const appUrl = this.configService.get<string>('APP_URL') || 'http://localhost:3000';
+    const verificationLink = `${appUrl}/auth/verify-email?email=${encodeURIComponent(email)}&code=${emailCode}`;
+
+    // ✅ Email with verification link and 6-digit codes
     const emailMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-        <h2 style="color: #1a73e8;">🔐 ECO-SMART - Verification Codes</h2>
+        <h2 style="color: #1a73e8;">🔐 ECO-SMART - Verify Your Account</h2>
         <p>Dear <strong>${username}</strong>,</p>
-        <p>Your verification codes are:</p>
+        <p>Thank you for registering with ECO-SMART! Please verify your account:</p>
+        
+        <!-- ✅ Verification Button -->
         <div style="text-align: center; margin: 30px 0;">
-          <div style="font-size: 32px; font-weight: bold; color: #1a73e8; letter-spacing: 5px; margin-bottom: 10px;">
-            Email Code: <strong>${emailCode}</strong>
+          <a href="${verificationLink}" 
+             style="background-color: #1a73e8; color: white; padding: 14px 35px; 
+                    text-decoration: none; border-radius: 5px; font-size: 16px; 
+                    display: inline-block; font-weight: bold;">
+            ✅ Verify Email Address
+          </a>
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">
+            Or copy this link: <br>
+            <span style="word-break: break-all;">${verificationLink}</span>
+          </p>
+        </div>
+        
+        <p>Your verification codes are:</p>
+        <div style="text-align: center; margin: 20px 0;">
+          <div style="font-size: 24px; font-weight: bold; color: #1a73e8; letter-spacing: 5px;">
+            📧 Email Code: <strong>${emailCode}</strong>
           </div>
-          <div style="font-size: 32px; font-weight: bold; color: #34a853; letter-spacing: 5px;">
-            Phone Code: <strong>${phoneOtp}</strong>
+          <div style="font-size: 24px; font-weight: bold; color: #34a853; letter-spacing: 5px;">
+            📱 Phone Code: <strong>${phoneOtp}</strong>
           </div>
         </div>
+        
         <p>These codes will expire in <strong>30 minutes</strong>.</p>
+        <hr style="border: 1px solid #eee;">
         <p style="font-size: 12px; color: #999;">ECO-SMART Security Team</p>
       </div>
     `;
 
     await this.mailerService.sendMail({
       to: email,
-      subject: '🔐 ECO-SMART - Verification Codes',
+      subject: '🔐 ECO-SMART - Account Verification Codes',
       html: emailMessage,
     });
 
@@ -212,22 +234,43 @@ export class AuthService {
       throw new NotFoundException('User with this email does not exist.');
     }
 
-    const resetCode = Math.floor(10000 + Math.random() * 90000).toString();
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
     
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 15);
 
+    const appUrl = this.configService.get<string>('APP_URL') || 'http://localhost:3000';
+    const resetLink = `${appUrl}/reset-password?email=${encodeURIComponent(email)}&code=${resetCode}`;
+
     const emailMessage = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-        <h2 style="color: #1a73e8;">🔐 Password Reset Code</h2>
+        <h2 style="color: #1a73e8;">🔐 Password Reset Request</h2>
         <p>Dear <strong>${user.username}</strong>,</p>
+        <p>We received a request to reset your password.</p>
+        
+        <!-- ✅ Reset Password Button -->
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetLink}" 
+             style="background-color: #ea4335; color: white; padding: 14px 35px; 
+                    text-decoration: none; border-radius: 5px; font-size: 16px; 
+                    display: inline-block; font-weight: bold;">
+            🔑 Reset Password
+          </a>
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">
+            Or copy this link: <br>
+            <span style="word-break: break-all;">${resetLink}</span>
+          </p>
+        </div>
+        
         <p>Your password reset code is:</p>
-        <div style="text-align: center; margin: 30px 0; font-size: 32px; font-weight: bold; color: #1a73e8; letter-spacing: 5px;">
+        <div style="text-align: center; margin: 20px 0; font-size: 32px; font-weight: bold; color: #1a73e8; letter-spacing: 5px;">
           ${resetCode}
         </div>
+        
         <p>This code will expire in <strong>15 minutes</strong>.</p>
         <p>If you didn't request this, please ignore this email.</p>
+        <hr style="border: 1px solid #eee;">
         <p style="font-size: 12px; color: #999;">ECO-SMART Security Team</p>
       </div>
     `;
@@ -253,7 +296,6 @@ export class AuthService {
       status: 'success', 
       message: 'Password reset code sent to your email.',
       method: 'email',
-      code: resetCode,
     };
   }
 
@@ -263,7 +305,7 @@ export class AuthService {
       throw new NotFoundException('User with this phone number does not exist.');
     }
 
-    const resetCode = Math.floor(10000 + Math.random() * 90000).toString();
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
     
     const expiresAt = new Date();
@@ -288,7 +330,6 @@ export class AuthService {
       status: 'success', 
       message: `Reset code sent to your phone.`,
       method: 'phone',
-      code: resetCode,
     };
   }
 
